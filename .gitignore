@@ -6,3 +6,4 @@ dist/
 *.key
 coverage/
 .DS_Store
+revolut-v0.3-update/
