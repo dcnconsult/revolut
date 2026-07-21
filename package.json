@@ -1,8 +1,8 @@
 {
   "name": "revolute-business-api",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Bank-to-bank payment orchestration scaffold for the Revolut Business API",
+  "description": "Bank-to-bank payment orchestration with manual and ISO 20022 XML ingestion for the Revolut Business API",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
@@ -14,10 +14,14 @@
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm test"
   },
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
+    "@fastify/multipart": "^10.1.0",
     "@fastify/sensible": "^6.0.2",
     "dotenv": "^16.4.7",
+    "fast-xml-parser": "^5.10.1",
     "fastify": "^5.2.1",
     "jose": "^6.0.8",
     "pino": "^9.6.0",
@@ -30,5 +34,6 @@
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.24.0",
     "vitest": "^3.0.6"
-  }
+  },
+  "packageManager": "npm@10.9.2"
 }

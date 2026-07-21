@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.03">
+  <CstmrCdtTrfInitn>
+    <GrpHdr>
+      <MsgId>REVOLUTE-20260721-001</MsgId>
+      <CreDtTm>2026-07-21T14:30:00Z</CreDtTm>
+      <NbOfTxs>2</NbOfTxs>
+      <CtrlSum>1500.50</CtrlSum>
+      <InitgPty><Nm>DCN Consulting</Nm></InitgPty>
+    </GrpHdr>
+    <PmtInf>
+      <PmtInfId>PMT-EUR-001</PmtInfId>
+      <PmtMtd>TRF</PmtMtd>
+      <BtchBookg>true</BtchBookg>
+      <NbOfTxs>2</NbOfTxs>
+      <CtrlSum>1500.50</CtrlSum>
+      <PmtTpInf>
+        <SvcLvl><Cd>SEPA</Cd></SvcLvl>
+      </PmtTpInf>
+      <ReqdExctnDt>2099-07-23</ReqdExctnDt>
+      <Dbtr><Nm>DCN Consulting</Nm></Dbtr>
+      <DbtrAcct>
+        <Id><IBAN>GB82WEST12345698765432</IBAN></Id>
+        <Ccy>EUR</Ccy>
+      </DbtrAcct>
+      <DbtrAgt><FinInstnId><BIC>REVOGB21XXX</BIC></FinInstnId></DbtrAgt>
+      <ChrgBr>SLEV</ChrgBr>
+      <CdtTrfTxInf>
+        <PmtId>
+          <InstrId>INSTR-001</InstrId>
+          <EndToEndId>E2E-20260721-001</EndToEndId>
+        </PmtId>
+        <Amt><InstdAmt Ccy="EUR">1000.00</InstdAmt></Amt>
+        <CdtrAgt><FinInstnId><BIC>COBADEFFXXX</BIC></FinInstnId></CdtrAgt>
+        <Cdtr>
+          <Nm>Example GmbH</Nm>
+          <PstlAdr>
+            <StrtNm>Unter den Linden</StrtNm>
+            <BldgNb>1</BldgNb>
+            <PstCd>10117</PstCd>
+            <TwnNm>Berlin</TwnNm>
+            <Ctry>DE</Ctry>
+          </PstlAdr>
+        </Cdtr>
+        <CdtrAcct><Id><IBAN>DE89370400440532013000</IBAN></Id></CdtrAcct>
+        <Purp><Cd>GDDS</Cd></Purp>
+        <RmtInf><Ustrd>Invoice 2026-001</Ustrd></RmtInf>
+      </CdtTrfTxInf>
+      <CdtTrfTxInf>
+        <PmtId>
+          <InstrId>INSTR-002</InstrId>
+          <EndToEndId>E2E-20260721-002</EndToEndId>
+        </PmtId>
+        <Amt><InstdAmt Ccy="EUR">500.50</InstdAmt></Amt>
+        <CdtrAgt><FinInstnId><BIC>POFICHBEXXX</BIC></FinInstnId></CdtrAgt>
+        <Cdtr>
+          <Nm>Muster AG</Nm>
+          <PstlAdr>
+            <AdrLine>Bahnhofstrasse 10</AdrLine>
+            <PstCd>8001</PstCd>
+            <TwnNm>Zurich</TwnNm>
+            <Ctry>CH</Ctry>
+          </PstlAdr>
+        </Cdtr>
+        <CdtrAcct><Id><IBAN>CH9300762011623852957</IBAN></Id></CdtrAcct>
+        <RmtInf>
+          <Strd><CdtrRefInf><Ref>RF18539007547034</Ref></CdtrRefInf></Strd>
+        </RmtInf>
+      </CdtTrfTxInf>
+    </PmtInf>
+  </CstmrCdtTrfInitn>
+</Document>

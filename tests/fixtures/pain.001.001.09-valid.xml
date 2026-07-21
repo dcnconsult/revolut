@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.09">
+  <CstmrCdtTrfInitn>
+    <GrpHdr>
+      <MsgId>REVOLUTE-20260721-009</MsgId>
+      <CreDtTm>2026-07-21T15:00:00Z</CreDtTm>
+      <NbOfTxs>1</NbOfTxs>
+      <CtrlSum>250.25</CtrlSum>
+      <InitgPty><Nm>DCN Consulting</Nm></InitgPty>
+    </GrpHdr>
+    <PmtInf>
+      <PmtInfId>PMT-EUR-009</PmtInfId>
+      <PmtMtd>TRF</PmtMtd>
+      <NbOfTxs>1</NbOfTxs>
+      <CtrlSum>250.25</CtrlSum>
+      <PmtTpInf><SvcLvl><Cd>SEPA</Cd></SvcLvl></PmtTpInf>
+      <ReqdExctnDt><Dt>2099-07-24</Dt></ReqdExctnDt>
+      <Dbtr><Nm>DCN Consulting</Nm></Dbtr>
+      <DbtrAcct><Id><IBAN>GB82WEST12345698765432</IBAN></Id><Ccy>EUR</Ccy></DbtrAcct>
+      <DbtrAgt><FinInstnId><BICFI>REVOGB21XXX</BICFI></FinInstnId></DbtrAgt>
+      <ChrgBr>SLEV</ChrgBr>
+      <CdtTrfTxInf>
+        <PmtId><InstrId>INSTR-009</InstrId><EndToEndId>E2E-20260721-009</EndToEndId></PmtId>
+        <Amt><InstdAmt Ccy="EUR">250.25</InstdAmt></Amt>
+        <CdtrAgt><FinInstnId><BICFI>COBADEFFXXX</BICFI></FinInstnId></CdtrAgt>
+        <Cdtr>
+          <Nm>Example GmbH</Nm>
+          <PstlAdr><AdrLine>Unter den Linden 1</AdrLine><PstCd>10117</PstCd><TwnNm>Berlin</TwnNm><Ctry>DE</Ctry></PstlAdr>
+        </Cdtr>
+        <CdtrAcct><Id><IBAN>DE89370400440532013000</IBAN></Id></CdtrAcct>
+        <RmtInf><Ustrd>Invoice 2026-009</Ustrd></RmtInf>
+      </CdtTrfTxInf>
+    </PmtInf>
+  </CstmrCdtTrfInitn>
+</Document>

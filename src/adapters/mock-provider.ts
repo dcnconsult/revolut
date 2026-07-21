@@ -16,8 +16,8 @@ export class MockBankingProvider implements BankingProvider {
     return fields;
   }
 
-  async validateBeneficiary() {
-    return { result: 'cannot_be_checked' as const, source: 'mock' as const };
+  async validateBeneficiary(payment: PaymentRequest) {
+    return { result: 'match' as const, matchedName: payment.beneficiary.legalName, source: 'mock' as const };
   }
 
   async quoteTransfer(payment: PaymentRequest) {
