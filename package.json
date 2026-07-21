@@ -1,6 +1,6 @@
 {
   "name": "revolute-business-api",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Bank-to-bank payment orchestration with manual and ISO 20022 XML ingestion for the Revolut Business API",
   "type": "module",
@@ -12,7 +12,12 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm test"
+    "check": "npm run lint && npm run typecheck && npm test",
+    "test:iso20022": "vitest run tests/iso20022-parser.test.ts tests/iso20022-routes.test.ts",
+    "sandbox:setup": "node scripts/sandbox/setup.mjs",
+    "sandbox:accounts": "node scripts/sandbox/accounts.mjs",
+    "sandbox:topup": "node scripts/sandbox/topup.mjs",
+    "sandbox:simulate": "node scripts/sandbox/simulate-transfer.mjs"
   },
   "engines": {
     "node": ">=22"
