@@ -7,3 +7,5 @@ dist/
 coverage/
 .DS_Store
 revolut-v0.3-update/
+.secrets/
+revolut-v*-update.zip
