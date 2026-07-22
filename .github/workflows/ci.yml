@@ -34,5 +34,11 @@ jobs:
       - name: Verify dependency tree
         run: npm ls --depth=0
 
+      - name: Validate Linux launcher syntax
+        run: bash -n START-HERE-SANDBOX.sh
+
       - name: Typecheck and test
         run: npm run check
+
+      - name: Build application
+        run: npm run build
