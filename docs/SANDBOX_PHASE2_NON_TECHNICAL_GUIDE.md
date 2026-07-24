@@ -1,15 +1,17 @@
-# Revolut Sandbox Phase 2 check
+# Revolut Sandbox daily monitor
 
 ## Who this guide is for
 
 This guide is for colleagues who do not work with code or servers.
 
 You will use one button in GitHub to check that our DigitalOcean server can
-safely read test-account information from Revolut Sandbox.
+safely authenticate to Revolut Sandbox and verify the supporting application,
+monitoring database, backup, cron, disk, credentials, and private network
+binding.
 
 You will not need a terminal, certificate, token, password, or API key.
 
-## What Phase 2 proves
+## What the monitor proves
 
 A successful check proves all of the following:
 
@@ -18,17 +20,22 @@ A successful check proves all of the following:
 - Revolut Sandbox accepts our **READ-only** permission.
 - The Droplet can retrieve a summary of the test accounts.
 - The request used the Sandbox address, not the Production address.
+- The application is healthy in Sandbox mode.
+- The monitoring database and latest backup are readable and valid.
+- The weekly backup schedule is installed.
+- Disk use and credential-file permissions remain within configured limits.
+- Port 3000 remains bound only to the Droplet loopback interface.
 
 Phase 2 does **not**:
 
 - send or schedule a payment;
 - change an account, counterparty, card, or team member;
 - read sensitive card numbers or CVVs;
-- connect the public application to real banking;
+- connect the public application to Production banking;
 - prove that Production is ready.
 
-The application itself continues to use its safe mock payment provider. Phase
-2 is a separate connectivity check.
+The application uses the Sandbox internal-transfer provider. The daily monitor
+is read-only and never calls either the preparation or submission endpoint.
 
 ## Before you start
 
@@ -58,38 +65,32 @@ authorization code.
 The final line starts with:
 
 ```text
-PHASE2_SANDBOX_OK
+REMOTE_MONITOR_OK
 ```
 
-It also shows:
-
-- the number of Sandbox accounts;
-- how many are active;
-- the test currencies returned;
-- `host=sandbox-b2b.revolut.com`;
-- `permission=READ`.
-
-This is a successful Phase 2 check.
+It confirms health, authentication, database, backup, cron, disk, and
+loopback-only binding without printing account details. This is a successful
+daily monitor.
 
 ### Red X
 
 The final error starts with:
 
 ```text
-PHASE2_SANDBOX_FAILED
+REMOTE_MONITOR_FAILED
 ```
 
 Do not retry more than once.
 
-Copy only the `PHASE2_SANDBOX_FAILED` line and send it to the project
+Copy only the `REMOTE_MONITOR_FAILED` line and send it to the project
 maintainer. Never copy surrounding environment values, tokens, keys, or
 complete diagnostic logs into email or chat.
 
 ## Safety rules
 
 - Run only the workflow named **Check Revolut Sandbox from Droplet**.
-- Confirm the result says `host=sandbox-b2b.revolut.com`.
-- Confirm the result says `permission=READ`.
+- Confirm the result says `mode=sandbox`.
+- Confirm the result says `authentication=ok` and `bind=loopback`.
 - Never add, change, or reveal GitHub secrets.
 - Never open or download files from `.secrets`, `/etc/revolut`, or `/run/secrets`.
 - Never enable **Manage account details**, **Make payments**, or **Read sensitive card details** without a separately approved test plan.
@@ -103,6 +104,6 @@ Record only:
 - tester's name;
 - GitHub Actions run link;
 - green or red result;
-- account count and currencies from a green result.
+- the single green or red result line.
 
 Do not record account IDs, balances, certificates, tokens, or keys.

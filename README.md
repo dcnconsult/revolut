@@ -111,11 +111,17 @@ npm run build
 npm audit --audit-level=high
 ```
 
-## DigitalOcean mock deployment
+## DigitalOcean Sandbox deployment
 
 The repository includes a containerized, SSH-driven deployment path for an
-Ubuntu 24.04 Droplet. It is intentionally locked to `REVOLUT_MODE=mock` and
-binds the API only to the Droplet loopback interface.
+Ubuntu 24.04 Droplet. The active Droplet runs `REVOLUT_MODE=sandbox`, refuses
+Production mode, and binds the API only to the Droplet loopback interface.
+Local development continues to default to the deterministic mock provider.
+
+Every merge to `master` is validated, deployed as an immutable commit-SHA
+release, and subjected to a prepared-only remote smoke test. The Droplet also
+runs a daily read-only monitor, a weekly prepared-only persistence test, and a
+weekly SQLite backup retaining the newest four verified local generations.
 
 See [`docs/DIGITALOCEAN_DEPLOYMENT.md`](docs/DIGITALOCEAN_DEPLOYMENT.md) for
 the one-time bootstrap, GitHub environment secrets, deployment, and rollback.
@@ -128,6 +134,13 @@ For the dry-run-first, Sandbox-only account transfer test, see
 
 For the loopback-only application mode backed by real Revolut Sandbox internal
 transfers, see [`docs/SANDBOX_LIVE_MODE.md`](docs/SANDBOX_LIVE_MODE.md).
+
+For routine checks, failure response, monitoring access, backup retention, and
+non-technical operating instructions, see
+[`docs/SANDBOX_OPERATIONS_RUNBOOK.md`](docs/SANDBOX_OPERATIONS_RUNBOOK.md).
+The implemented controls and items deliberately deferred until live-conversion
+planning are summarized in
+[`docs/SANDBOX_CLOSEOUT_STATUS.md`](docs/SANDBOX_CLOSEOUT_STATUS.md).
 
 ## Important boundaries
 

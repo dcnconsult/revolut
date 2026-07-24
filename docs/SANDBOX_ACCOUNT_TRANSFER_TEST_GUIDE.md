@@ -21,8 +21,10 @@ The test:
 
 It never prints account IDs, balances, tokens, certificates, or private keys.
 
-The application API remains mock-only. This test is a separate one-shot
-container with no network port.
+The application API runs in loopback-only Sandbox mode. This optional transfer
+test remains a separate one-shot container with no network port. Routine
+monitoring uses the prepared-only smoke workflow instead and does not execute
+`POST /transfer`.
 
 ## Before an executed test
 

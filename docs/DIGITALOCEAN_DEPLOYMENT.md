@@ -1,15 +1,18 @@
-# DigitalOcean mock deployment
+# DigitalOcean Sandbox deployment
 
-This deployment deliberately runs only the deterministic mock provider. It
-does not make the scaffold suitable for live-money submission.
+The Droplet currently runs the Revolut Business Sandbox internal-transfer
+provider. Sandbox and Production remain separate, and this deployment does not
+make the scaffold suitable for live-money submission.
 
 ## Security model
 
 - The API container is bound only to `127.0.0.1:3000` on the Droplet.
 - The firewall exposes SSH only.
 - Deployments run as the dedicated `deploy` user, not `root`.
-- `/etc/revolut/revolut.env` must contain `REVOLUT_MODE=mock`.
-- The activation script refuses any other mode.
+- `/etc/revolut/revolut.env` must contain `REVOLUT_MODE=sandbox` for the
+  active deployment. The deterministic local fallback uses `mock`.
+- The activation script permits only `mock` or `sandbox` and refuses
+  Production mode.
 - GitHub Actions secrets contain SSH connection material; Git does not.
 
 Until authentication and a TLS reverse proxy are designed, reach the API with
@@ -47,7 +50,10 @@ has been tested in a separate session.
 
 ## GitHub environment and secrets
 
-In repository settings, create an environment named `mock-production`.
+The existing deployment environment is named `mock-production` for historical
+compatibility with its configured secrets. Despite that legacy name, the
+Droplet's root-managed environment file selects Sandbox mode and Production
+mode is refused.
 Configure required reviewers if deployment should require a manual approval.
 
 Add these environment secrets:
@@ -121,11 +127,13 @@ Do not add Revolut private keys, refresh tokens, populated `.env` files, bank
 XML, or GitHub deployment secrets to the repository. Live mode remains blocked
 by the controls documented in `IMPLEMENTATION_CHECKLIST.md`.
 
-## Phase 2: READ-only Revolut Sandbox check
+## READ-only Revolut Sandbox monitoring
 
-Phase 2 is a separate one-shot container. It does not change the API service
-from `MockBankingProvider`, exposes no port, and refuses every API host except
-Revolut Sandbox.
+The underlying account-authentication check runs in a separate one-shot
+container, exposes no port, and refuses every API host except Revolut Sandbox.
+The scheduled daily monitor combines that check with application health,
+SQLite monitoring, backup freshness and integrity, credential permissions,
+disk capacity, cron status, and loopback binding.
 
 An explicitly configured `REVOLUT_MODE=sandbox` release uses
 `compose.sandbox.yaml` and supports only transfers between accounts owned by
@@ -159,7 +167,11 @@ bash /opt/revolut/current/scripts/deploy/run-sandbox-phase2-check.sh
 
 Non-technical testers should use the **Check Revolut Sandbox from Droplet**
 manual GitHub Actions workflow and follow
-[`SANDBOX_PHASE2_NON_TECHNICAL_GUIDE.md`](SANDBOX_PHASE2_NON_TECHNICAL_GUIDE.md).
+[`SANDBOX_PHASE2_NON_TECHNICAL_GUIDE.md`](SANDBOX_PHASE2_NON_TECHNICAL_GUIDE.md)
+or the broader
+[`SANDBOX_OPERATIONS_RUNBOOK.md`](SANDBOX_OPERATIONS_RUNBOOK.md).
 
-Successful output is a non-sensitive summary beginning with
-`PHASE2_SANDBOX_OK`. It never prints tokens, account IDs, or balances.
+Successful workflow output is a non-sensitive summary beginning with
+`REMOTE_MONITOR_OK`. The underlying account check still uses
+`PHASE2_SANDBOX_OK` internally. Neither output prints tokens, account IDs, or
+balances.
