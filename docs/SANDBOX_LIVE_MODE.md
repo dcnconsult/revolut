@@ -110,8 +110,16 @@ Install or refresh the cron entry with:
 bash /opt/revolut/current/scripts/deploy/install-sqlite-backup-cron.sh
 ```
 
-Test a backup immediately with:
+The scheduled command uses local storage and retains the newest four verified
+backup/checksum pairs. Test the same behavior immediately with:
 
 ```bash
-bash /opt/revolut/current/scripts/deploy/backup-sandbox-database.sh
+bash /opt/revolut/current/scripts/deploy/backup-sandbox-database.sh \
+  --storage local --retention 4
 ```
+
+Retention accepts counts from 1 through 52. Object storage is deferred and
+remains disabled until its encrypted storage configuration is explicitly
+installed. See
+[`SANDBOX_OPERATIONS_RUNBOOK.md`](SANDBOX_OPERATIONS_RUNBOOK.md) for scheduled
+monitoring, dashboard access, backup controls, and incident response.
