@@ -2,6 +2,8 @@ name: Run Safe Remote Sandbox Smoke Test
 
 "on":
   workflow_dispatch:
+  schedule:
+    - cron: "47 4 * * 0"
 
 concurrency:
   group: revolut-sandbox-remote-smoke
@@ -9,6 +11,7 @@ concurrency:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   smoke:
@@ -36,3 +39,39 @@ jobs:
           ssh -i "$HOME/.ssh/deploy_key" \
             "${DROPLET_USER}@${DROPLET_HOST}" \
             "bash /opt/revolut/current/scripts/deploy/run-remote-smoke-test.sh"
+
+      - name: Open or update scheduled failure alert
+        if: ${{ failure() && github.event_name == 'schedule' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ALERT_TITLE: "[Ops] Weekly Revolut Sandbox smoke test failed"
+        run: |
+          issue_number="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 \
+            --json number,title \
+            --jq '.[] | select(.title == env.ALERT_TITLE) | .number' | head -n 1)"
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          if [[ -n "$issue_number" ]]; then
+            gh issue comment "$issue_number" --repo "$GITHUB_REPOSITORY" \
+              --body "The scheduled smoke test failed again: ${run_url}"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "$ALERT_TITLE" \
+              --body "The scheduled prepared-only Sandbox smoke test failed. No transfer submission was attempted: ${run_url}"
+          fi
+
+      - name: Close recovered scheduled failure alert
+        if: ${{ success() && github.event_name == 'schedule' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ALERT_TITLE: "[Ops] Weekly Revolut Sandbox smoke test failed"
+        run: |
+          issue_number="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 \
+            --json number,title \
+            --jq '.[] | select(.title == env.ALERT_TITLE) | .number' | head -n 1)"
+          if [[ -n "$issue_number" ]]; then
+            run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            gh issue comment "$issue_number" --repo "$GITHUB_REPOSITORY" \
+              --body "The scheduled smoke test recovered successfully: ${run_url}"
+            gh issue close "$issue_number" --repo "$GITHUB_REPOSITORY" \
+              --reason completed
+          fi

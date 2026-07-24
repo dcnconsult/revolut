@@ -19,9 +19,12 @@ apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
   ca-certificates \
   curl \
+  age \
   docker.io \
   docker-compose-v2 \
   jq \
+  openssl \
+  rclone \
   rsync \
   ufw
 
