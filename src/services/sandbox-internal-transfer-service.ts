@@ -3,6 +3,7 @@ import type {
   RevolutSandboxAccount,
   SandboxInternalTransferClient
 } from '../adapters/revolut-sandbox-client.js';
+import type { SandboxTransferStore } from '../storage/sandbox-transfer-store.js';
 
 export interface SandboxInternalTransferRequest {
   sourceAccountId: string;
@@ -25,11 +26,10 @@ export interface SandboxInternalTransferRecord {
 const providerStates = new Set(['pending', 'completed', 'failed', 'reverted', 'declined']);
 
 export class SandboxInternalTransferService {
-  private readonly records = new Map<string, SandboxInternalTransferRecord>();
-
   constructor(
     private readonly client: SandboxInternalTransferClient,
-    private readonly maximumAmountMinor: number
+    private readonly maximumAmountMinor: number,
+    private readonly store: SandboxTransferStore
   ) {}
 
   async listAccounts() {
@@ -47,9 +47,7 @@ export class SandboxInternalTransferService {
     if (request.amountMinor > this.maximumAmountMinor) {
       throw new Error(`Sandbox transfer exceeds the configured maximum of ${this.maximumAmountMinor} minor units.`);
     }
-    const existing = [...this.records.values()].find(
-      record => record.request.clientReference === request.clientReference
-    );
+    const existing = this.store.findByClientReference(request.clientReference);
     if (existing) {
       if (JSON.stringify(existing.request) !== JSON.stringify(request)) {
         throw new Error('Idempotency conflict: clientReference belongs to a different Sandbox transfer.');
@@ -79,7 +77,7 @@ export class SandboxInternalTransferService {
       createdAt: now,
       updatedAt: now
     };
-    this.records.set(record.id, record);
+    this.store.save(record, 'prepared', { amountMinor: request.amountMinor, currency: request.currency });
     return structuredClone(record);
   }
 
@@ -112,7 +110,7 @@ export class SandboxInternalTransferService {
       state: this.mapProviderState(result.state),
       updatedAt: new Date().toISOString()
     };
-    this.records.set(id, updated);
+    this.store.save(updated, 'submitted', { providerTransactionIdPresent: true });
     return structuredClone(updated);
   }
 
@@ -125,7 +123,7 @@ export class SandboxInternalTransferService {
       state: this.mapProviderState(result.state),
       updatedAt: new Date().toISOString()
     };
-    this.records.set(id, updated);
+    this.store.save(updated, 'reconciled', { providerState: result.state });
     return structuredClone(updated);
   }
 
@@ -133,8 +131,20 @@ export class SandboxInternalTransferService {
     return structuredClone(this.mustGet(id));
   }
 
+  listTransfers(limit: number) {
+    return this.store.list(limit);
+  }
+
+  listAuditEvents(limit: number) {
+    return this.store.listAuditEvents(limit);
+  }
+
+  monitoringSummary() {
+    return this.store.summary();
+  }
+
   private mustGet(id: string) {
-    const record = this.records.get(id);
+    const record = this.store.get(id);
     if (!record) throw new Error('Sandbox transfer not found.');
     return record;
   }

@@ -25,6 +25,8 @@ COPY --from=build --chown=node:node /app/dist ./dist
 COPY --chown=node:node scripts/sandbox/droplet-accounts.mjs ./scripts/sandbox/droplet-accounts.mjs
 COPY --chown=node:node scripts/sandbox/account-transfer-core.mjs ./scripts/sandbox/account-transfer-core.mjs
 COPY --chown=node:node scripts/sandbox/droplet-transfer.mjs ./scripts/sandbox/droplet-transfer.mjs
+COPY --chown=node:node scripts/backup-sqlite.mjs ./scripts/backup-sqlite.mjs
+RUN install -d -m 0700 -o node -g node /var/lib/revolut
 
 USER node
 

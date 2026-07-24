@@ -15,10 +15,12 @@ import { Iso20022ImportService } from './services/iso20022-import-service.js';
 import { PaymentOrchestrator } from './services/payment-orchestrator.js';
 import { SandboxInternalTransferService } from './services/sandbox-internal-transfer-service.js';
 import { InMemoryPaymentStore } from './storage/payment-store.js';
+import { SQLiteSandboxTransferStore } from './storage/sandbox-transfer-store.js';
 
 interface BuildAppOptions {
   mode?: typeof env.REVOLUT_MODE;
   sandboxClient?: SandboxInternalTransferClient;
+  sandboxDatabasePath?: string;
 }
 
 export function buildApp(options: BuildAppOptions = {}) {
@@ -71,10 +73,13 @@ export function buildApp(options: BuildAppOptions = {}) {
       tokensPath: env.REVOLUT_SANDBOX_TOKENS_PATH,
       privateKeyPath: env.REVOLUT_SANDBOX_PRIVATE_KEY_PATH
     });
+    const store = new SQLiteSandboxTransferStore(options.sandboxDatabasePath ?? env.SANDBOX_DATABASE_PATH);
     const service = new SandboxInternalTransferService(
       client,
-      env.SANDBOX_INTERNAL_TRANSFER_MAX_MINOR
+      env.SANDBOX_INTERNAL_TRANSFER_MAX_MINOR,
+      store
     );
+    app.addHook('onClose', async () => store.close());
     app.register(async instance => {
       await sandboxInternalTransferRoutes(instance, service);
     }, { prefix: '/v1' });

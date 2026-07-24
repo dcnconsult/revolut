@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type {
   RevolutSandboxAccount,
   SandboxInternalTransferClient
 } from '../src/adapters/revolut-sandbox-client.js';
 import { SandboxInternalTransferService } from '../src/services/sandbox-internal-transfer-service.js';
+import { SQLiteSandboxTransferStore } from '../src/storage/sandbox-transfer-store.js';
 
 const accounts: RevolutSandboxAccount[] = [
   {
@@ -36,6 +40,14 @@ function createClient(): SandboxInternalTransferClient {
   };
 }
 
+function createService(client = createClient(), maximum = 1_000) {
+  return new SandboxInternalTransferService(
+    client,
+    maximum,
+    new SQLiteSandboxTransferStore(':memory:')
+  );
+}
+
 const request = {
   sourceAccountId: accounts[0]!.id,
   targetAccountId: accounts[1]!.id,
@@ -48,7 +60,7 @@ const request = {
 describe('SandboxInternalTransferService', () => {
   it('prepares and explicitly submits an owned same-currency Sandbox transfer', async () => {
     const client = createClient();
-    const service = new SandboxInternalTransferService(client, 1_000);
+    const service = createService(client);
     const prepared = await service.prepare(request);
     expect(prepared.state).toBe('prepared');
 
@@ -67,7 +79,7 @@ describe('SandboxInternalTransferService', () => {
 
   it('is idempotent by client reference and does not submit twice', async () => {
     const client = createClient();
-    const service = new SandboxInternalTransferService(client, 1_000);
+    const service = createService(client);
     const first = await service.prepare(request);
     const second = await service.prepare(request);
     expect(second.id).toBe(first.id);
@@ -78,7 +90,7 @@ describe('SandboxInternalTransferService', () => {
   });
 
   it('rejects unknown accounts, currency mismatches, and excessive amounts', async () => {
-    const service = new SandboxInternalTransferService(createClient(), 1_000);
+    const service = createService();
     await expect(service.prepare({
       ...request,
       sourceAccountId: '44444444-4444-4444-8444-444444444444'
@@ -93,5 +105,25 @@ describe('SandboxInternalTransferService', () => {
       clientReference: 'sandbox-live-0003',
       amountMinor: 1_001
     })).rejects.toThrow('configured maximum');
+  });
+
+  it('persists transfers and audit history across database reopen', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'revolut-sqlite-store-'));
+    const path = join(directory, 'sandbox.sqlite');
+    try {
+      const firstStore = new SQLiteSandboxTransferStore(path);
+      const service = new SandboxInternalTransferService(createClient(), 1_000, firstStore);
+      const prepared = await service.prepare({ ...request, clientReference: 'sandbox-persist-0001' });
+      firstStore.close();
+
+      const reopened = new SQLiteSandboxTransferStore(path);
+      expect(reopened.get(prepared.id)?.state).toBe('prepared');
+      expect(reopened.listAuditEvents(10)).toMatchObject([
+        { transferId: prepared.id, eventType: 'prepared', state: 'prepared' }
+      ]);
+      reopened.close();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });

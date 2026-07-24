@@ -81,6 +81,9 @@ if [[ "${health_response}" != *"\"mode\":\"${revolut_mode}\""* ]]; then
 fi
 
 ln -sfn "${release_dir}" "${app_root}/current"
+if [[ "${revolut_mode}" == "sandbox" ]]; then
+  bash "${release_dir}/scripts/deploy/install-sqlite-backup-cron.sh"
+fi
 docker image prune -f
 
 echo "Activated ${release_sha}: ${health_response}"

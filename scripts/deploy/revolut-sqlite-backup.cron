@@ -1,0 +1,1 @@
+17 3 * * 0 deploy /opt/revolut/current/scripts/deploy/backup-sandbox-database.sh >> /var/backups/revolut/cron.log 2>&1

@@ -14,8 +14,8 @@ Revolut Business Sandbox. It never selects the Production Business API.
   supported.
 - Preparation does not move test funds. Submission is a separate request.
 - The default maximum is 1,000 minor units (`10.00`).
-- Records and idempotency state are currently in memory and reset when the
-  container restarts. This mode is for controlled Sandbox testing only.
+- Records and idempotency state are stored in a local SQLite database using
+  WAL mode and JSON-validated record columns.
 - The application remains bound to `127.0.0.1:3000` on the Droplet.
 
 ## Endpoints
@@ -84,3 +84,34 @@ the three files read-only, and verifies that `/health` reports:
 
 To return to the deterministic provider, restore `REVOLUT_MODE=mock` and
 reactivate a release. Production must not be selected.
+
+## Local monitoring and backups
+
+The loopback-only monitoring page is available at:
+
+```text
+http://127.0.0.1:3000/v1/sandbox/monitoring
+```
+
+JSON endpoints provide the summary, recent transfers, and append-only audit
+events under `/v1/sandbox/monitoring/`.
+
+The SQLite database is stored in the Docker volume `revolut_revolut-data`.
+The weekly cron job runs Sunday at 03:17 server time and creates a consistent
+SQLite online backup plus a SHA-256 checksum under:
+
+```text
+/var/backups/revolut/
+```
+
+Install or refresh the cron entry with:
+
+```bash
+bash /opt/revolut/current/scripts/deploy/install-sqlite-backup-cron.sh
+```
+
+Test a backup immediately with:
+
+```bash
+bash /opt/revolut/current/scripts/deploy/backup-sandbox-database.sh
+```

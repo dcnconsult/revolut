@@ -35,7 +35,7 @@ describe('Sandbox server mode', () => {
   });
 
   it('reports the real Sandbox provider and does not register mock payment routes', async () => {
-    app = buildApp({ mode: 'sandbox', sandboxClient: client });
+    app = buildApp({ mode: 'sandbox', sandboxClient: client, sandboxDatabasePath: ':memory:' });
     const health = await app.inject({ method: 'GET', url: '/health' });
     expect(health.json()).toEqual({
       status: 'ok',
@@ -56,7 +56,7 @@ describe('Sandbox server mode', () => {
   });
 
   it('uses prepare then submit for an internal Sandbox transfer', async () => {
-    app = buildApp({ mode: 'sandbox', sandboxClient: client });
+    app = buildApp({ mode: 'sandbox', sandboxClient: client, sandboxDatabasePath: ':memory:' });
     const preparedResponse = await app.inject({
       method: 'POST',
       url: '/v1/sandbox/internal-transfers/prepare',
@@ -78,6 +78,15 @@ describe('Sandbox server mode', () => {
     });
     expect(submittedResponse.statusCode).toBe(200);
     expect(submittedResponse.json().state).toBe('completed');
+
+    const summary = await app.inject({ method: 'GET', url: '/v1/sandbox/monitoring/summary' });
+    expect(summary.json()).toMatchObject({ total: 1, byState: { completed: 1 } });
+
+    const audit = await app.inject({ method: 'GET', url: '/v1/sandbox/monitoring/audit-events' });
+    expect(audit.json().map((event: { eventType: string }) => event.eventType)).toEqual([
+      'submitted',
+      'prepared'
+    ]);
   });
 
   it('refuses production mode', () => {

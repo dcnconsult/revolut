@@ -16,6 +16,7 @@ const EnvSchema = z.object({
   REVOLUT_SANDBOX_TOKENS_PATH: z.string().default('/run/secrets/revolut-sandbox-tokens'),
   REVOLUT_SANDBOX_PRIVATE_KEY_PATH: z.string().default('/run/secrets/revolut-sandbox-private-key'),
   SANDBOX_INTERNAL_TRANSFER_MAX_MINOR: z.coerce.number().int().positive().max(10_000).default(1_000),
+  SANDBOX_DATABASE_PATH: z.string().default('/var/lib/revolut/sandbox-transfers.sqlite'),
   PAYMENT_MAX_AMOUNT_MINOR: z.coerce.number().int().positive().default(100_000_000),
   PAYMENT_ALLOWED_CURRENCIES: z.string().default('EUR,GBP,CHF,USD'),
   PAYMENT_REQUIRE_NAME_MATCH: z.string().transform(value => value === 'true').default('true'),
