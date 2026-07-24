@@ -18,7 +18,8 @@
     "sandbox:accounts": "node scripts/sandbox/accounts.mjs",
     "sandbox:droplet-check": "node scripts/sandbox/droplet-accounts.mjs",
     "sandbox:topup": "node scripts/sandbox/topup.mjs",
-    "sandbox:simulate": "node scripts/sandbox/simulate-transfer.mjs"
+    "sandbox:simulate": "node scripts/sandbox/simulate-transfer.mjs",
+    "sandbox:transfer": "node scripts/sandbox/account-transfer.mjs"
   },
   "engines": {
     "node": ">=22"
