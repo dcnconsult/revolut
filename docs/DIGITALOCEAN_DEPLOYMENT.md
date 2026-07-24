@@ -76,8 +76,26 @@ Merging to `master` or manually dispatching the workflow:
 2. builds and health-checks the container;
 3. uploads files to an immutable commit-SHA release directory;
 4. builds the image on the Droplet;
-5. starts it and requires `/health` to report mock mode; and
-6. updates `/opt/revolut/current`.
+5. starts it and requires `/health` to report the configured mode;
+6. in Sandbox mode, runs a prepared-only remote smoke test covering
+   idempotency, restart persistence, monitoring, backup verification, and
+   loopback-only binding; and
+7. updates `/opt/revolut/current` only when those checks pass.
+
+If candidate startup, health, backup scheduling, or the Sandbox smoke test
+fails, the activation script attempts to reactivate the previous immutable
+release automatically. The smoke test never calls the transfer submission
+endpoint and never prints account identifiers, balances, or credentials.
+
+Run the same safe smoke test manually with the **Run Safe Remote Sandbox Smoke
+Test** GitHub Actions workflow or from the Droplet:
+
+```bash
+bash /opt/revolut/current/scripts/deploy/run-remote-smoke-test.sh
+```
+
+A successful run prints one non-sensitive line beginning with
+`REMOTE_SMOKE_OK`.
 
 Images are tagged with the Git commit SHA. To reactivate an existing release:
 

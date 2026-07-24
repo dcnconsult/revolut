@@ -1,0 +1,38 @@
+name: Run Safe Remote Sandbox Smoke Test
+
+"on":
+  workflow_dispatch:
+
+concurrency:
+  group: revolut-sandbox-remote-smoke
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Prepared-only remote smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: sandbox-phase2
+
+    steps:
+      - name: Configure SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DROPLET_KNOWN_HOSTS }}
+        run: |
+          install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/deploy_key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/deploy_key" "$HOME/.ssh/known_hosts"
+
+      - name: Run prepared-only smoke test on Droplet
+        env:
+          DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
+          DROPLET_USER: ${{ secrets.DROPLET_USER }}
+        run: |
+          ssh -i "$HOME/.ssh/deploy_key" \
+            "${DROPLET_USER}@${DROPLET_HOST}" \
+            "bash /opt/revolut/current/scripts/deploy/run-remote-smoke-test.sh"

@@ -95,11 +95,19 @@ jobs:
             -e "ssh -i $HOME/.ssh/deploy_key" \
             ./ "${DROPLET_USER}@${DROPLET_HOST}:${release_path}/"
 
-      - name: Activate and verify configured release
+      - name: Activate, smoke test, and verify configured release
         env:
           DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
           DROPLET_USER: ${{ secrets.DROPLET_USER }}
         run: |
+          set -o pipefail
           ssh -i "$HOME/.ssh/deploy_key" \
             "${DROPLET_USER}@${DROPLET_HOST}" \
-            "bash '/opt/revolut/releases/${GITHUB_SHA}/scripts/deploy/activate-release.sh' '${GITHUB_SHA}'"
+            "bash '/opt/revolut/releases/${GITHUB_SHA}/scripts/deploy/activate-release.sh' '${GITHUB_SHA}'" |
+            tee /tmp/revolut-deployment.log
+          {
+            echo "### Remote deployment verification"
+            echo '```text'
+            grep -E '^(REMOTE_SMOKE_OK|Activated |ROLLBACK_)' /tmp/revolut-deployment.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

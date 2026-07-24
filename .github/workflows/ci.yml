@@ -35,7 +35,7 @@ jobs:
         run: npm ls --depth=0
 
       - name: Validate Linux launcher syntax
-        run: bash -n START-HERE-SANDBOX.sh
+        run: bash -n START-HERE-SANDBOX.sh scripts/deploy/*.sh
 
       - name: Typecheck and test
         run: npm run check
