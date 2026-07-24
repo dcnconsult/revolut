@@ -54,35 +54,73 @@ if [[ -L "${app_root}/current" ]]; then
   previous_release="$(readlink -f "${app_root}/current")"
 fi
 
+rollback_previous_release() {
+  if [[ -z "${previous_release}" || ! -d "${previous_release}" ]]; then
+    echo "ROLLBACK_UNAVAILABLE: no previous release exists." >&2
+    return 1
+  fi
+
+  previous_sha="$(basename "${previous_release}")"
+  rollback_compose_args=(-f compose.yaml)
+  if [[ "${revolut_mode}" == "sandbox" ]]; then
+    if [[ ! -f "${previous_release}/compose.sandbox.yaml" ]]; then
+      echo "ROLLBACK_FAILED: previous Sandbox overlay is missing." >&2
+      return 1
+    fi
+    rollback_compose_args+=(-f compose.sandbox.yaml)
+  fi
+
+  cd "${previous_release}"
+  if IMAGE_TAG="${previous_sha}" REVOLUT_ENV_FILE="${env_file}" \
+    docker compose "${rollback_compose_args[@]}" up -d --remove-orphans --wait --wait-timeout 90; then
+    ln -sfn "${previous_release}" "${app_root}/current"
+    echo "ROLLBACK_OK release=${previous_sha}"
+    return 0
+  fi
+
+  echo "ROLLBACK_FAILED: previous release could not be reactivated." >&2
+  return 1
+}
+
 cd "${release_dir}"
 export IMAGE_TAG="${release_sha}"
 export REVOLUT_ENV_FILE="${env_file}"
 
 docker compose "${compose_args[@]}" build --pull
-docker compose "${compose_args[@]}" up -d --remove-orphans --wait --wait-timeout 90
+if ! docker compose "${compose_args[@]}" up -d --remove-orphans --wait --wait-timeout 90; then
+  echo "Candidate release failed to start; attempting rollback." >&2
+  rollback_previous_release || true
+  exit 1
+fi
 
-health_response="$(curl --fail --silent --show-error \
-  --retry 8 \
-  --retry-delay 2 \
-  --retry-all-errors \
-  http://127.0.0.1:3000/health)"
+if ! health_response="$(curl --fail --silent --show-error \
+    --retry 8 \
+    --retry-delay 2 \
+    --retry-all-errors \
+    http://127.0.0.1:3000/health)"; then
+  echo "Candidate health check failed; attempting rollback." >&2
+  rollback_previous_release || true
+  exit 1
+fi
 
 if [[ "${health_response}" != *"\"mode\":\"${revolut_mode}\""* ]]; then
   echo "Health response did not confirm ${revolut_mode} mode: ${health_response}" >&2
-  if [[ "${revolut_mode}" == "mock" && -n "${previous_release}" && -d "${previous_release}" ]]; then
-    previous_sha="$(basename "${previous_release}")"
-    cd "${previous_release}"
-    IMAGE_TAG="${previous_sha}" REVOLUT_ENV_FILE="${env_file}" \
-      docker compose up -d --remove-orphans --wait --wait-timeout 90
-  else
-    echo "Automatic rollback is unavailable for a failed Sandbox cutover; restore REVOLUT_MODE=mock and reactivate the previous release." >&2
-  fi
+  rollback_previous_release || true
   exit 1
 fi
 
 ln -sfn "${release_dir}" "${app_root}/current"
 if [[ "${revolut_mode}" == "sandbox" ]]; then
-  bash "${release_dir}/scripts/deploy/install-sqlite-backup-cron.sh"
+  if ! bash "${release_dir}/scripts/deploy/install-sqlite-backup-cron.sh"; then
+    echo "Backup schedule installation failed; attempting rollback." >&2
+    rollback_previous_release || true
+    exit 1
+  fi
+  if ! bash "${release_dir}/scripts/deploy/run-remote-smoke-test.sh" "${release_sha}"; then
+    echo "Remote Sandbox smoke test failed; attempting rollback." >&2
+    rollback_previous_release || true
+    exit 1
+  fi
 fi
 docker image prune -f
 

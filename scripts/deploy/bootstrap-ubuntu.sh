@@ -21,6 +21,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
   curl \
   docker.io \
   docker-compose-v2 \
+  jq \
   rsync \
   ufw
 
