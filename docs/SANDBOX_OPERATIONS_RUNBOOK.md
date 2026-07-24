@@ -30,7 +30,8 @@ Neither scheduled workflow submits a transfer.
 - **Daily at 06:17 UTC:** service health, Sandbox authentication, monitoring
   database, backup freshness and checksum, backup cron, credential file
   permissions, disk use, and loopback binding.
-- **Sunday at 03:17 server time:** local SQLite backup.
+- **Sunday at 03:17 server time:** local SQLite backup, retaining the newest
+  four verified backup pairs.
 - **Sunday at 04:47 UTC:** prepared-only smoke test, including restart
   persistence and a fresh verified backup.
 
@@ -105,10 +106,28 @@ Encrypted off-droplet disaster recovery requires a private object-storage
 bucket, endpoint, access key, secret key, and a separately retained encryption
 secret. Do not place any of those values in Git.
 
+The backup command has explicit storage and retention controls:
+
+```bash
+# Current scheduled behavior: keep four local weekly backups.
+bash /opt/revolut/current/scripts/deploy/backup-sandbox-database.sh \
+  --storage local --retention 4
+
+# Future behavior after object storage is configured.
+bash /opt/revolut/current/scripts/deploy/backup-sandbox-database.sh \
+  --storage object --retention 8
+```
+
+Retention is a count from 1 to 52. A value of `1` keeps only the newest backup,
+effectively overwriting the previous generation. Rotation deletes only files
+matching the application's timestamped SQLite-backup naming pattern and their
+checksum sidecars. Object mode always makes and retains a local staging backup
+before attempting the encrypted upload.
+
 The guarded upload command is:
 
 ```bash
-bash /opt/revolut/current/scripts/deploy/upload-offsite-backup.sh
+bash /opt/revolut/current/scripts/deploy/upload-offsite-backup.sh --retention 8
 ```
 
 It remains disabled until `/etc/revolut/offsite-backup.env` explicitly contains

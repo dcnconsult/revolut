@@ -3,6 +3,29 @@ set -Eeuo pipefail
 
 config_file="/etc/revolut/offsite-backup.env"
 backup_directory="/var/backups/revolut"
+retention="4"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --retention)
+      retention="${2:-}"
+      shift 2
+      ;;
+    --help)
+      echo "Usage: upload-offsite-backup.sh [--retention COUNT]"
+      exit 0
+      ;;
+    *)
+      echo "OFFSITE_BACKUP_FAILED: unsupported argument: $1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ ! "${retention}" =~ ^[1-9][0-9]*$ ]] || (( retention > 52 )); then
+  echo "OFFSITE_BACKUP_FAILED: --retention must be an integer from 1 to 52." >&2
+  exit 2
+fi
 
 if [[ ! -r "${config_file}" ]]; then
   echo "OFFSITE_BACKUP_DISABLED: configuration is not installed." >&2
@@ -37,7 +60,7 @@ if [[ ! -r "${rclone_config}" ]]; then
   exit 1
 fi
 
-for command_name in age rclone sha256sum; do
+for command_name in age jq rclone sha256sum; do
   command -v "${command_name}" >/dev/null
 done
 
@@ -67,4 +90,22 @@ remote_base="${destination%/}/${encrypted_name}"
 rclone --config "${rclone_config}" copyto "${encrypted_file}" "${remote_base}"
 rclone --config "${rclone_config}" copyto "${encrypted_checksum}" "${remote_base}.sha256"
 
-echo "OFFSITE_BACKUP_OK file=${encrypted_name} encryption=age checksum=sha256"
+objects_json="$(rclone --config "${rclone_config}" lsjson "${destination%/}" \
+  --files-only --include 'sandbox-transfers-*.sqlite.age')"
+mapfile -t expired_objects < <(
+  jq -r --argjson retention "${retention}" \
+    'sort_by(.ModTime) | reverse | .[$retention:][]?.Path' \
+    <<<"${objects_json}"
+)
+removed_count=0
+for object_path in "${expired_objects[@]}"; do
+  if [[ "${object_path}" =~ ^sandbox-transfers-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{3}Z\.sqlite\.age$ ]]; then
+    rclone --config "${rclone_config}" deletefile \
+      "${destination%/}/${object_path}.sha256"
+    rclone --config "${rclone_config}" deletefile \
+      "${destination%/}/${object_path}"
+    (( removed_count += 1 ))
+  fi
+done
+
+echo "OFFSITE_BACKUP_OK file=${encrypted_name} encryption=age checksum=sha256 retained=${retention} removed=${removed_count}"
