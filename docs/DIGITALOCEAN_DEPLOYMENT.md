@@ -97,6 +97,17 @@ bash /opt/revolut/current/scripts/deploy/run-remote-smoke-test.sh
 A successful run prints one non-sensitive line beginning with
 `REMOTE_SMOKE_OK`.
 
+## Scheduled operations
+
+The **Check Revolut Sandbox from Droplet** workflow runs a read-only monitor
+daily at 06:17 UTC. The **Run Safe Remote Sandbox Smoke Test** workflow runs a
+prepared-only persistence and backup check each Sunday at 04:47 UTC. Scheduled
+failures open or update a deduplicated `[Ops]` GitHub issue; a later successful
+scheduled run closes it.
+
+See [`SANDBOX_OPERATIONS_RUNBOOK.md`](SANDBOX_OPERATIONS_RUNBOOK.md) for the
+non-technical operating procedure and escalation rules.
+
 Images are tagged with the Git commit SHA. To reactivate an existing release:
 
 ```bash
