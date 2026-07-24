@@ -91,3 +91,41 @@ bash /opt/revolut/releases/<FULL_COMMIT_SHA>/scripts/deploy/activate-release.sh 
 Do not add Revolut private keys, refresh tokens, populated `.env` files, bank
 XML, or GitHub deployment secrets to the repository. Live mode remains blocked
 by the controls documented in `IMPLEMENTATION_CHECKLIST.md`.
+
+## Phase 2: READ-only Revolut Sandbox check
+
+Phase 2 is a separate one-shot container. It does not change the API service
+from `MockBankingProvider`, exposes no port, and refuses every API host except
+Revolut Sandbox.
+
+The Droplet stores these root-managed files:
+
+```text
+/etc/revolut/sandbox/config.json
+/etc/revolut/sandbox/tokens.json
+/etc/revolut/sandbox/privatecert.pem
+```
+
+The three files are mounted read-only into the probe container. Their contents
+do not appear in Docker environment inspection. None belongs in Git, a release
+directory, a Docker image, or a GitHub secret.
+
+The committed check reads the saved configuration and refuses to run unless
+the API URL is exactly:
+
+```text
+https://sandbox-b2b.revolut.com/api/1.0
+```
+
+Technical operators can run:
+
+```bash
+bash /opt/revolut/current/scripts/deploy/run-sandbox-phase2-check.sh
+```
+
+Non-technical testers should use the **Check Revolut Sandbox from Droplet**
+manual GitHub Actions workflow and follow
+[`SANDBOX_PHASE2_NON_TECHNICAL_GUIDE.md`](SANDBOX_PHASE2_NON_TECHNICAL_GUIDE.md).
+
+Successful output is a non-sensitive summary beginning with
+`PHASE2_SANDBOX_OK`. It never prints tokens, account IDs, or balances.

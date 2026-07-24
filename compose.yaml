@@ -26,3 +26,32 @@ services:
       options:
         max-size: 10m
         max-file: "3"
+
+  sandbox-probe:
+    profiles: ["sandbox-phase2"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: revolut-api:${IMAGE_TAG:-local}
+    environment:
+      REVOLUT_SANDBOX_CONFIG_PATH: /run/secrets/revolut-sandbox-config
+      REVOLUT_SANDBOX_TOKENS_PATH: /run/secrets/revolut-sandbox-tokens
+      REVOLUT_SANDBOX_PRIVATE_KEY_PATH: /run/secrets/revolut-sandbox-private-key
+    volumes:
+      - ${REVOLUT_SANDBOX_CONFIG_FILE:-/etc/revolut/sandbox/config.json}:/run/secrets/revolut-sandbox-config:ro
+      - ${REVOLUT_SANDBOX_TOKENS_FILE:-/etc/revolut/sandbox/tokens.json}:/run/secrets/revolut-sandbox-tokens:ro
+      - ${REVOLUT_SANDBOX_PRIVATE_KEY_FILE:-/etc/revolut/sandbox/privatecert.pem}:/run/secrets/revolut-sandbox-private-key:ro
+    command: ["node", "scripts/sandbox/droplet-accounts.mjs"]
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: "no"
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: "2"

@@ -22,6 +22,7 @@ RUN npm ci --omit=dev --ignore-scripts \
     && npm cache clean --force
 
 COPY --from=build --chown=node:node /app/dist ./dist
+COPY --chown=node:node scripts/sandbox/droplet-accounts.mjs ./scripts/sandbox/droplet-accounts.mjs
 
 USER node
 

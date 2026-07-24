@@ -298,17 +298,31 @@ export async function getUsableAccessToken() {
 
 export async function sandboxApiRequest(path, { method = 'GET', body, scopesDescription } = {}) {
   if (!path.startsWith('/')) throw new SandboxSetupError('Sandbox API path must start with /.');
-  const token = await getUsableAccessToken();
   const url = `${SANDBOX_API_BASE_URL}${path}`;
-  const headers = { Authorization: `Bearer ${token}` };
+  let token = await getUsableAccessToken();
+  const headers = {};
   let requestBody;
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json';
     requestBody = JSON.stringify(body);
   }
 
-  const response = await fetch(url, { method, headers, body: requestBody });
-  const text = await response.text();
+  let response = await fetch(url, {
+    method,
+    headers: { ...headers, Authorization: `Bearer ${token}` },
+    body: requestBody
+  });
+  let text = await response.text();
+  if (response.status === 401) {
+    token = (await refreshAccessToken()).accessToken;
+    response = await fetch(url, {
+      method,
+      headers: { ...headers, Authorization: `Bearer ${token}` },
+      body: requestBody
+    });
+    text = await response.text();
+  }
+
   const parsed = parseJsonMaybe(text);
   if (!response.ok) {
     const explanation = formatApiError(response.status, parsed, text);
