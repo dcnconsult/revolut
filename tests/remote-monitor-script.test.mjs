@@ -17,6 +17,14 @@ const offsiteScript = await readFile(
   new URL('../scripts/deploy/upload-offsite-backup.sh', import.meta.url),
   'utf8'
 );
+const localBackupScript = await readFile(
+  new URL('../scripts/deploy/backup-sandbox-database.sh', import.meta.url),
+  'utf8'
+);
+const backupCron = await readFile(
+  new URL('../scripts/deploy/revolut-sqlite-backup.cron', import.meta.url),
+  'utf8'
+);
 
 describe('scheduled remote operations', () => {
   it('keeps the daily monitor read-only and non-sensitive', () => {
@@ -55,5 +63,16 @@ describe('scheduled remote operations', () => {
     expect(offsiteScript).toContain('age --encrypt');
     expect(offsiteScript).toContain('rclone');
     expect(offsiteScript).toContain('sha256sum --check --status');
+  });
+
+  it('supports explicit storage and bounded retention switches', () => {
+    expect(localBackupScript).toContain('--storage');
+    expect(localBackupScript).toContain('--retention');
+    expect(localBackupScript).toContain('storage="local"');
+    expect(localBackupScript).toContain('retention="4"');
+    expect(localBackupScript).toContain('retention > 52');
+    expect(localBackupScript).toContain('rm -f --');
+    expect(backupCron).toContain('--storage local --retention 4');
+    expect(offsiteScript).toContain('deletefile');
   });
 });

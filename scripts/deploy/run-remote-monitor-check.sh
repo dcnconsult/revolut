@@ -65,7 +65,7 @@ backup_age_seconds="$(( $(date +%s) - $(stat -c '%Y' "${backup_file}") ))"
 monitor_step="backup-schedule"
 systemctl is-active --quiet cron
 grep -Fqx \
-  '17 3 * * 0 deploy /opt/revolut/current/scripts/deploy/backup-sandbox-database.sh >> /var/backups/revolut/cron.log 2>&1' \
+  '17 3 * * 0 deploy /opt/revolut/current/scripts/deploy/backup-sandbox-database.sh --storage local --retention 4 >> /var/backups/revolut/cron.log 2>&1' \
   /etc/cron.d/revolut-sqlite-backup
 
 monitor_step="credential-permissions"
