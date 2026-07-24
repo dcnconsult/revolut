@@ -98,6 +98,11 @@ Phase 2 is a separate one-shot container. It does not change the API service
 from `MockBankingProvider`, exposes no port, and refuses every API host except
 Revolut Sandbox.
 
+An explicitly configured `REVOLUT_MODE=sandbox` release uses
+`compose.sandbox.yaml` and supports only transfers between accounts owned by
+the same Sandbox business. Production mode is refused. See
+`SANDBOX_LIVE_MODE.md`.
+
 The Droplet stores these root-managed files:
 
 ```text

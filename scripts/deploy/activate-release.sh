@@ -21,9 +21,32 @@ if [[ ! -r "${env_file}" ]]; then
   exit 1
 fi
 
-if ! grep -qx 'REVOLUT_MODE=mock' "${env_file}"; then
-  echo "Refusing deployment: REVOLUT_MODE must be exactly mock." >&2
+revolut_mode="$(sed -n 's/^REVOLUT_MODE=//p' "${env_file}" | tail -n 1)"
+if [[ "${revolut_mode}" != "mock" && "${revolut_mode}" != "sandbox" ]]; then
+  echo "Refusing deployment: REVOLUT_MODE must be exactly mock or sandbox." >&2
   exit 1
+fi
+
+compose_args=(-f compose.yaml)
+if [[ "${revolut_mode}" == "sandbox" ]]; then
+  sandbox_overlay="${release_dir}/compose.sandbox.yaml"
+  if [[ ! -f "${sandbox_overlay}" ]]; then
+    echo "Sandbox deployment overlay is missing: ${sandbox_overlay}" >&2
+    exit 1
+  fi
+  for credential_file in \
+    /etc/revolut/sandbox/config.json \
+    /etc/revolut/sandbox/tokens.json \
+    /etc/revolut/sandbox/privatecert.pem; do
+    if [[ ! -r "${credential_file}" ]]; then
+      echo "Sandbox credential is missing or unreadable: ${credential_file}" >&2
+      exit 1
+    fi
+  done
+  export REVOLUT_SANDBOX_CONFIG_FILE="/etc/revolut/sandbox/config.json"
+  export REVOLUT_SANDBOX_TOKENS_FILE="/etc/revolut/sandbox/tokens.json"
+  export REVOLUT_SANDBOX_PRIVATE_KEY_FILE="/etc/revolut/sandbox/privatecert.pem"
+  compose_args+=(-f compose.sandbox.yaml)
 fi
 
 previous_release=""
@@ -35,8 +58,8 @@ cd "${release_dir}"
 export IMAGE_TAG="${release_sha}"
 export REVOLUT_ENV_FILE="${env_file}"
 
-docker compose build --pull
-docker compose up -d --remove-orphans --wait --wait-timeout 90
+docker compose "${compose_args[@]}" build --pull
+docker compose "${compose_args[@]}" up -d --remove-orphans --wait --wait-timeout 90
 
 health_response="$(curl --fail --silent --show-error \
   --retry 8 \
@@ -44,13 +67,15 @@ health_response="$(curl --fail --silent --show-error \
   --retry-all-errors \
   http://127.0.0.1:3000/health)"
 
-if [[ "${health_response}" != *'"mode":"mock"'* ]]; then
-  echo "Health response did not confirm mock mode: ${health_response}" >&2
-  if [[ -n "${previous_release}" && -d "${previous_release}" ]]; then
+if [[ "${health_response}" != *"\"mode\":\"${revolut_mode}\""* ]]; then
+  echo "Health response did not confirm ${revolut_mode} mode: ${health_response}" >&2
+  if [[ "${revolut_mode}" == "mock" && -n "${previous_release}" && -d "${previous_release}" ]]; then
     previous_sha="$(basename "${previous_release}")"
     cd "${previous_release}"
     IMAGE_TAG="${previous_sha}" REVOLUT_ENV_FILE="${env_file}" \
       docker compose up -d --remove-orphans --wait --wait-timeout 90
+  else
+    echo "Automatic rollback is unavailable for a failed Sandbox cutover; restore REVOLUT_MODE=mock and reactivate the previous release." >&2
   fi
   exit 1
 fi

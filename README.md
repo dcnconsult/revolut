@@ -126,6 +126,9 @@ For the non-technical, READ-only server connectivity check, see
 For the dry-run-first, Sandbox-only account transfer test, see
 [`docs/SANDBOX_ACCOUNT_TRANSFER_TEST_GUIDE.md`](docs/SANDBOX_ACCOUNT_TRANSFER_TEST_GUIDE.md).
 
+For the loopback-only application mode backed by real Revolut Sandbox internal
+transfers, see [`docs/SANDBOX_LIVE_MODE.md`](docs/SANDBOX_LIVE_MODE.md).
+
 ## Important boundaries
 
 This scaffold does not bypass bank authorization, compliance, source-account ownership, beneficiary checks, transaction limits, or approval policy. It contains no certificates, private keys, refresh tokens, or access tokens.
