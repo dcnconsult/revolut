@@ -45,6 +45,19 @@ export async function loadDropletSandboxConfigFiles({
 }
 
 export async function runDropletAccountsProbe(config, fetchImplementation = fetch) {
+  const accessToken = await createDropletAccessToken(config, fetchImplementation);
+  const accounts = await dropletSandboxApiRequest(config, '/accounts', {
+    accessToken,
+    fetchImplementation
+  });
+  if (!Array.isArray(accounts)) {
+    throw new Error('Sandbox GET /accounts did not return a list.');
+  }
+
+  return summarizeAccounts(accounts);
+}
+
+export async function createDropletAccessToken(config, fetchImplementation = fetch) {
   const privatePem = await readFile(config.privateKeyPath, 'utf8');
   const privateKey = createPrivateKey(privatePem);
   const now = Math.floor(Date.now() / 1000);
@@ -71,16 +84,34 @@ export async function runDropletAccountsProbe(config, fetchImplementation = fetc
   if (!tokenResponse.ok || !tokenPayload?.access_token) {
     throw new Error(formatRevolutError(tokenResponse.status, tokenPayload, 'Sandbox token refresh failed'));
   }
+  return tokenPayload.access_token;
+}
 
-  const accountsResponse = await fetchImplementation(`${config.baseUrl}/accounts`, {
-    headers: { Authorization: `Bearer ${tokenPayload.access_token}` }
-  });
-  const accounts = await readJsonResponse(accountsResponse, 'GET /accounts');
-  if (!accountsResponse.ok || !Array.isArray(accounts)) {
-    throw new Error(formatRevolutError(accountsResponse.status, accounts, 'Sandbox GET /accounts failed'));
+export async function dropletSandboxApiRequest(config, path, {
+  method = 'GET',
+  body,
+  accessToken,
+  fetchImplementation = fetch
+} = {}) {
+  if (config.baseUrl !== SANDBOX_API_BASE_URL) {
+    throw new Error(`Refusing non-Sandbox API URL: ${config.baseUrl}`);
   }
+  if (!path.startsWith('/')) throw new Error('Sandbox API path must start with /.');
+  if (!accessToken) throw new Error('A Sandbox access token is required.');
 
-  return summarizeAccounts(accounts);
+  const response = await fetchImplementation(`${config.baseUrl}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' })
+    },
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
+  const payload = await readJsonResponse(response, `${method} ${path}`);
+  if (!response.ok) {
+    throw new Error(formatRevolutError(response.status, payload, `Sandbox ${method} ${path} failed`));
+  }
+  return payload;
 }
 
 export function summarizeAccounts(accounts) {

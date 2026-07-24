@@ -123,6 +123,9 @@ the one-time bootstrap, GitHub environment secrets, deployment, and rollback.
 For the non-technical, READ-only server connectivity check, see
 [`docs/SANDBOX_PHASE2_NON_TECHNICAL_GUIDE.md`](docs/SANDBOX_PHASE2_NON_TECHNICAL_GUIDE.md).
 
+For the dry-run-first, Sandbox-only account transfer test, see
+[`docs/SANDBOX_ACCOUNT_TRANSFER_TEST_GUIDE.md`](docs/SANDBOX_ACCOUNT_TRANSFER_TEST_GUIDE.md).
+
 ## Important boundaries
 
 This scaffold does not bypass bank authorization, compliance, source-account ownership, beneficiary checks, transaction limits, or approval policy. It contains no certificates, private keys, refresh tokens, or access tokens.
