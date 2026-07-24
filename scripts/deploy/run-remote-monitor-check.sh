@@ -26,6 +26,12 @@ health_response="$(curl --fail --silent --show-error --max-time 15 \
   http://127.0.0.1:3000/health)"
 jq -e '.status == "ok" and .mode == "sandbox"' \
   <<<"${health_response}" >/dev/null
+for _attempt in {1..30}; do
+  if [[ "$(docker inspect --format '{{.State.Health.Status}}' revolut-api-1)" == "healthy" ]]; then
+    break
+  fi
+  sleep 1
+done
 [[ "$(docker inspect --format '{{.State.Health.Status}}' revolut-api-1)" == "healthy" ]]
 [[ "$(docker port revolut-api-1 3000/tcp)" == "127.0.0.1:3000" ]]
 
