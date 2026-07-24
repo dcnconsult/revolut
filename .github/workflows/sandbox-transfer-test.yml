@@ -1,0 +1,65 @@
+name: Test Sandbox Account Transfer
+
+"on":
+  workflow_dispatch:
+    inputs:
+      amount:
+        description: Sandbox test amount (0.01 to 10.00)
+        required: true
+        default: "0.01"
+        type: string
+      execute:
+        description: Move Sandbox test funds (leave off for dry run)
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: revolut-sandbox-transfer-test
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  transfer:
+    name: Sandbox-only account transfer
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: sandbox-phase2
+
+    steps:
+      - name: Validate operator input
+        env:
+          TRANSFER_AMOUNT: ${{ inputs.amount }}
+        run: |
+          if [[ ! "$TRANSFER_AMOUNT" =~ ^([0-9]+)(\.[0-9]{1,2})?$ ]]; then
+            echo "Amount must be a positive number with at most two decimals." >&2
+            exit 2
+          fi
+          awk -v amount="$TRANSFER_AMOUNT" 'BEGIN { exit !(amount >= 0.01 && amount <= 10) }'
+
+      - name: Configure SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DROPLET_KNOWN_HOSTS }}
+        run: |
+          install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/deploy_key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/deploy_key" "$HOME/.ssh/known_hosts"
+
+      - name: Run Sandbox transfer test on Droplet
+        env:
+          DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
+          DROPLET_USER: ${{ secrets.DROPLET_USER }}
+          TRANSFER_AMOUNT: ${{ inputs.amount }}
+          EXECUTE_TRANSFER: ${{ inputs.execute }}
+        run: |
+          execute_argument=""
+          if [[ "$EXECUTE_TRANSFER" == "true" ]]; then
+            execute_argument="--execute"
+          fi
+          ssh -i "$HOME/.ssh/deploy_key" \
+            "${DROPLET_USER}@${DROPLET_HOST}" \
+            "bash /opt/revolut/current/scripts/deploy/run-sandbox-transfer-test.sh --amount '$TRANSFER_AMOUNT' $execute_argument"

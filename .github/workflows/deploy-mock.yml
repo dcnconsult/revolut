@@ -1,4 +1,4 @@
-name: Deploy mock API to DigitalOcean
+name: Deploy API to DigitalOcean
 
 "on":
   workflow_dispatch:
@@ -59,7 +59,7 @@ jobs:
           exit 1
 
   deploy:
-    name: Deploy mock release
+    name: Deploy configured release
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -95,7 +95,7 @@ jobs:
             -e "ssh -i $HOME/.ssh/deploy_key" \
             ./ "${DROPLET_USER}@${DROPLET_HOST}:${release_path}/"
 
-      - name: Activate and verify mock release
+      - name: Activate and verify configured release
         env:
           DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
           DROPLET_USER: ${{ secrets.DROPLET_USER }}
