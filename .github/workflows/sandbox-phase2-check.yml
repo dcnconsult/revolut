@@ -1,0 +1,38 @@
+name: Check Revolut Sandbox from Droplet
+
+"on":
+  workflow_dispatch:
+
+concurrency:
+  group: revolut-sandbox-phase2-check
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: READ-only Sandbox account check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: sandbox-phase2
+
+    steps:
+      - name: Configure SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DROPLET_KNOWN_HOSTS }}
+        run: |
+          install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/deploy_key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/deploy_key" "$HOME/.ssh/known_hosts"
+
+      - name: Run Phase 2 check on Droplet
+        env:
+          DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
+          DROPLET_USER: ${{ secrets.DROPLET_USER }}
+        run: |
+          ssh -i "$HOME/.ssh/deploy_key" \
+            "${DROPLET_USER}@${DROPLET_HOST}" \
+            "bash /opt/revolut/current/scripts/deploy/run-sandbox-phase2-check.sh"

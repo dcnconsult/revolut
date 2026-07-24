@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/server.js",
+    "start": "node dist/src/server.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
@@ -16,6 +16,7 @@
     "test:iso20022": "vitest run tests/iso20022-parser.test.ts tests/iso20022-routes.test.ts",
     "sandbox:setup": "node scripts/sandbox/setup.mjs",
     "sandbox:accounts": "node scripts/sandbox/accounts.mjs",
+    "sandbox:droplet-check": "node scripts/sandbox/droplet-accounts.mjs",
     "sandbox:topup": "node scripts/sandbox/topup.mjs",
     "sandbox:simulate": "node scripts/sandbox/simulate-transfer.mjs"
   },

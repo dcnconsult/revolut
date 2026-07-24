@@ -1,0 +1,11 @@
+.git
+.github
+.env
+.secrets
+coverage
+dist
+node_modules
+*.cer
+*.key
+*.pem
+revolut-v*-update.zip

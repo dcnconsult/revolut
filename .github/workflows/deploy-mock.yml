@@ -1,0 +1,105 @@
+name: Deploy mock API to DigitalOcean
+
+"on":
+  workflow_dispatch:
+  push:
+    branches: [master]
+
+concurrency:
+  group: revolut-mock-droplet
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate deployment candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci --include=dev
+
+      - name: Check, test, and build
+        run: |
+          npm run check
+          npm run build
+
+      - name: Validate deployment shell scripts
+        run: bash -n scripts/deploy/*.sh
+
+      - name: Build container
+        run: docker build --tag revolut-api:test .
+
+      - name: Run container health check
+        run: |
+          docker run --detach --name revolut-api-test \
+            --env REVOLUT_MODE=mock \
+            --publish 127.0.0.1:3000:3000 \
+            revolut-api:test
+          for attempt in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:3000/health |
+              grep --quiet '"mode":"mock"'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs revolut-api-test
+          exit 1
+
+  deploy:
+    name: Deploy mock release
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: mock-production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Configure SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DROPLET_KNOWN_HOSTS }}
+        run: |
+          install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/deploy_key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/deploy_key" "$HOME/.ssh/known_hosts"
+
+      - name: Upload immutable release
+        env:
+          DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
+          DROPLET_USER: ${{ secrets.DROPLET_USER }}
+        run: |
+          release_path="/opt/revolut/releases/${GITHUB_SHA}"
+          ssh -i "$HOME/.ssh/deploy_key" \
+            "${DROPLET_USER}@${DROPLET_HOST}" \
+            "mkdir -p '${release_path}'"
+          rsync --archive --compress --delete \
+            --exclude .git \
+            --exclude node_modules \
+            --exclude dist \
+            -e "ssh -i $HOME/.ssh/deploy_key" \
+            ./ "${DROPLET_USER}@${DROPLET_HOST}:${release_path}/"
+
+      - name: Activate and verify mock release
+        env:
+          DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
+          DROPLET_USER: ${{ secrets.DROPLET_USER }}
+        run: |
+          ssh -i "$HOME/.ssh/deploy_key" \
+            "${DROPLET_USER}@${DROPLET_HOST}" \
+            "bash '/opt/revolut/releases/${GITHUB_SHA}/scripts/deploy/activate-release.sh' '${GITHUB_SHA}'"

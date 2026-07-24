@@ -111,6 +111,18 @@ npm run build
 npm audit --audit-level=high
 ```
 
+## DigitalOcean mock deployment
+
+The repository includes a containerized, SSH-driven deployment path for an
+Ubuntu 24.04 Droplet. It is intentionally locked to `REVOLUT_MODE=mock` and
+binds the API only to the Droplet loopback interface.
+
+See [`docs/DIGITALOCEAN_DEPLOYMENT.md`](docs/DIGITALOCEAN_DEPLOYMENT.md) for
+the one-time bootstrap, GitHub environment secrets, deployment, and rollback.
+
+For the non-technical, READ-only server connectivity check, see
+[`docs/SANDBOX_PHASE2_NON_TECHNICAL_GUIDE.md`](docs/SANDBOX_PHASE2_NON_TECHNICAL_GUIDE.md).
+
 ## Important boundaries
 
 This scaffold does not bypass bank authorization, compliance, source-account ownership, beneficiary checks, transaction limits, or approval policy. It contains no certificates, private keys, refresh tokens, or access tokens.
