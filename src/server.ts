@@ -3,6 +3,9 @@ import multipart from '@fastify/multipart';
 import sensible from '@fastify/sensible';
 import staticFiles from '@fastify/static';
 import { existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MockBankingProvider } from './adapters/mock-provider.js';
 import {
@@ -14,6 +17,7 @@ import { iso20022ImportRoutes } from './http/routes/iso20022-imports.js';
 import { paymentRoutes } from './http/routes/payments.js';
 import { sandboxInternalTransferRoutes } from './http/routes/sandbox-internal-transfers.js';
 import { operatorRoutes } from './http/routes/operator.js';
+import { caseRoutes } from './http/routes/cases.js';
 import { Iso20022ParserService } from './iso20022/parser.js';
 import { Iso20022ImportService } from './services/iso20022-import-service.js';
 import { PaymentOrchestrator } from './services/payment-orchestrator.js';
@@ -26,12 +30,25 @@ import {
   OperatorAuth,
   type OperatorCredentials
 } from './security/operator-auth.js';
+import { SQLiteCaseStore } from './cases/case-store.js';
+import { EncryptedEvidenceStore } from './cases/evidence-store.js';
+import { BrokeredFundingCaseService } from './cases/case-service.js';
+import {
+  ClamAvScanner,
+  CleanTestScanner,
+  type MalwareScanner
+} from './cases/malware-scanner.js';
 
 interface BuildAppOptions {
   mode?: typeof env.REVOLUT_MODE;
   sandboxClient?: SandboxInternalTransferClient;
   sandboxDatabasePath?: string;
   operatorCredentials?: OperatorCredentials;
+  caseEvidenceRoot?: string;
+  caseEvidenceKey?: Buffer;
+  caseScanner?: MalwareScanner;
+  trustedSourceKeys?: Record<string, string>;
+  evidenceSigningKeyPem?: string;
 }
 
 export function buildApp(options: BuildAppOptions = {}) {
@@ -44,7 +61,7 @@ export function buildApp(options: BuildAppOptions = {}) {
       level: env.LOG_LEVEL,
       redact: ['req.headers.authorization', 'req.headers.x-api-key', 'req.headers.cookie']
     },
-    bodyLimit: env.ISO20022_MAX_FILE_BYTES + 200_000
+    bodyLimit: Math.max(env.ISO20022_MAX_FILE_BYTES, env.CASE_ZIP_MAX_BYTES) + 200_000
   });
   app.register(sensible);
   app.register(multipart, {
@@ -52,7 +69,7 @@ export function buildApp(options: BuildAppOptions = {}) {
       files: 1,
       fields: 4,
       parts: 5,
-      fileSize: env.ISO20022_MAX_FILE_BYTES,
+      fileSize: Math.max(env.ISO20022_MAX_FILE_BYTES, env.CASE_ZIP_MAX_BYTES),
       fieldSize: 100_000
     }
   });
@@ -95,10 +112,43 @@ export function buildApp(options: BuildAppOptions = {}) {
         ? createTestCredentials()
         : loadOperatorCredentials(env.OPERATOR_AUTH_CONFIG_PATH));
     const auth = new OperatorAuth(credentials, store, env.OPERATOR_COOKIE_SECURE);
-    app.addHook('onClose', async () => store.close());
+    const evidenceRoot = options.caseEvidenceRoot ??
+      (env.NODE_ENV === 'test'
+        ? join(tmpdir(), `revolut-case-evidence-${randomUUID()}`)
+        : env.CASE_EVIDENCE_ROOT);
+    const evidenceKey = options.caseEvidenceKey ?? loadOrCreateEvidenceKey(
+      evidenceRoot,
+      env.CASE_EVIDENCE_KEY_BASE64
+    );
+    const caseStore = new SQLiteCaseStore(options.sandboxDatabasePath ?? env.SANDBOX_DATABASE_PATH);
+    const caseService = new BrokeredFundingCaseService(
+      caseStore,
+      new EncryptedEvidenceStore(evidenceRoot, evidenceKey),
+      options.caseScanner ?? (
+        env.NODE_ENV === 'test'
+          ? new CleanTestScanner()
+          : new ClamAvScanner(env.CLAMAV_HOST, env.CLAMAV_PORT)
+      ),
+      client,
+      {
+        maximumZipBytes: env.CASE_ZIP_MAX_BYTES,
+        maximumEntries: env.CASE_ZIP_MAX_ENTRIES,
+        maximumEntryBytes: env.CASE_ZIP_MAX_ENTRY_BYTES,
+        maximumTotalBytes: env.CASE_ZIP_MAX_TOTAL_BYTES,
+        maximumCompressionRatio: env.CASE_ZIP_MAX_COMPRESSION_RATIO
+      },
+      options.trustedSourceKeys ?? env.trustedSourceKeys,
+      options.evidenceSigningKeyPem ?? (env.CASE_EVIDENCE_SIGNING_KEY_PEM || undefined)
+    );
+    caseService.resumePendingJobs();
+    app.addHook('onClose', async () => {
+      caseStore.close();
+      store.close();
+    });
     app.register(async instance => {
       await operatorRoutes(instance, auth);
       await sandboxInternalTransferRoutes(instance, service, auth);
+      if (env.BROKERED_FUNDING_ENABLED) await caseRoutes(instance, caseService, auth);
     }, { prefix: '/v1' });
 
     const frontendRoot = join(process.cwd(), 'dist', 'frontend');
@@ -112,6 +162,24 @@ export function buildApp(options: BuildAppOptions = {}) {
     }
   }
   return app;
+}
+
+function loadOrCreateEvidenceKey(root: string, configured: string) {
+  if (configured) {
+    const key = Buffer.from(configured, 'base64');
+    if (key.length !== 32) throw new Error('CASE_EVIDENCE_KEY_BASE64 must encode exactly 32 bytes.');
+    return key;
+  }
+  mkdirSync(root, { recursive: true, mode: 0o700 });
+  const keyPath = join(root, 'master.key');
+  if (existsSync(keyPath)) {
+    const key = Buffer.from(readFileSync(keyPath, 'utf8').trim(), 'base64');
+    if (key.length !== 32) throw new Error('Persisted case evidence key is invalid.');
+    return key;
+  }
+  const key = randomBytes(32);
+  writeFileSync(keyPath, `${key.toString('base64')}\n`, { mode: 0o600, flag: 'wx' });
+  return key;
 }
 
 if (process.env.NODE_ENV !== 'test') {

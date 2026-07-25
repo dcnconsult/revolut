@@ -1,161 +1,84 @@
-# REVOLUTE Business API scaffold
+# Revolut Sandbox funding workbench
 
-A TypeScript/Fastify foundation for preparing, validating, funding, submitting, and reconciling direct bank-to-bank payments through the Revolut Business API.
+This application helps one authorized operator review synthetic funding cases,
+observe test funds in Revolut Sandbox, approve an exact payout plan, execute the
+test payouts, and keep a signed evidence record.
 
-Payments can enter the same canonical workflow through either:
+It does **not** handle live money. An uploaded package creates a case for human
+review; it never proves that funds arrived and never authorizes a payment.
 
-1. manual JSON entry; or
-2. an uploaded ISO 20022 Customer Credit Transfer Initiation XML file (`pain.001`).
+## Start with the operator guide
 
-The current provider is deterministic and safe for local development. The production `RevolutBusinessProvider`, OAuth/X.509 token manager, persistent audit database, approvals, and verified completion webhooks remain isolated promotion gates.
+If you use the browser application, begin with
+[Start here for operators](docs/START_HERE.md).
 
-## Current ISO 20022 import profile
+The application also has a side-by-side HTML guide:
 
-The import API supports:
+1. Open the operator application.
+2. Select **Operator guide ↗**.
+3. Keep the new guide window beside the application.
+4. Use the search box to find tasks or statuses such as “upload,” “pending,”
+   “backup,” or “reconcile.”
 
-- `pain.001.001.09`, the current EPC SEPA customer-to-PSP message version;
-- `pain.001.001.03` as a legacy interoperability profile;
-- one or many `PmtInf` blocks and credit-transfer transactions;
-- IBAN beneficiaries and UK account-number/sort-code beneficiaries;
-- exact decimal-to-minor-unit conversion and control-sum reconciliation;
-- debtor-account-to-Revolut-account mapping;
-- deterministic import and payment references for duplicate detection;
-- aggregate batch funds verification before preparation;
-- atomic import by default, with explicit partial mode available for diagnostic use.
+## The safe operating sequence
 
-The parser performs secure XML syntax, supported-namespace, file-integrity, semantic, and application-schema validation. It deliberately reports `officialXsd: false`: official ISO/EPC XSD and implementation-guideline Schematron validation must be added before production promotion.
+Always complete these steps in order:
 
-## Run locally
+1. Upload the private ZIP package to quarantine.
+2. Wait for package safety and integrity checks.
+3. Compare submitted claims with machine and broker findings.
+4. Add corrections only as cited amendments.
+5. Independently observe and match the incoming Sandbox credit.
+6. Approve, reject, or request information.
+7. Review every payout, fee, reserve, and refund.
+8. Authorize and execute the exact plan.
+9. Reconcile provider results and export signed evidence.
 
-```bash
-cp .env.example .env
-npm install
-npm run dev
-```
+## Choose the right guide
 
-Health check:
+| I need to… | Read |
+| --- | --- |
+| Use the browser application | [Sandbox operator console](docs/SANDBOX_OPERATOR_CONSOLE.md) |
+| Work a funding case | [Funding-case guide](docs/BROKERED_FUNDING_CASES.md) |
+| Complete the daily check | [Operations runbook](docs/SANDBOX_OPERATIONS_RUNBOOK.md) |
+| Understand a status or term | [Plain-language glossary](docs/GLOSSARY.md) |
+| Run the advanced direct-transfer test | [Account transfer test](docs/SANDBOX_ACCOUNT_TRANSFER_TEST_GUIDE.md) |
+| Respond to an error | [Error and outage guide](docs/ERROR_MONITORING_AND_OUTAGE_ROADMAP.md) |
+| Restore a backup | [Backup restore drill](docs/CASE_BACKUP_RESTORE.md) |
+| Set up or deploy the server | [Administrator deployment guide](docs/DIGITALOCEAN_DEPLOYMENT.md) |
 
-```bash
-curl http://localhost:3000/health
-```
+## Non-negotiable safety boundaries
 
-## Manual payment entry
+- Confirm the yellow **REVOLUT SANDBOX · NO LIVE DATA** banner before work.
+- Use only synthetic identities and low-value test amounts.
+- Never use or store investor Revolut credentials.
+- Never treat package content as independent evidence of settlement.
+- Never create a counterparty automatically from uploaded instructions.
+- Never retry an authorization or payment with an unclear result.
+- Stop when Operations is Blocked or Backup is not Fresh.
+- Production mode remains unavailable.
 
-Prepare a transfer:
+## For administrators and developers
 
-```bash
-curl -X POST http://localhost:3000/v1/payments/prepare \
-  -H 'content-type: application/json' \
-  -d '{
-    "sourceAccountId":"8d43a0d9-f040-4c98-b9de-89cf30ab9807",
-    "amountMinor":10000,
-    "currency":"EUR",
-    "beneficiary":{
-      "legalName":"Example GmbH",
-      "accountType":"business",
-      "country":"DE",
-      "currency":"EUR",
-      "iban":"DE89370400440532013000",
-      "bic":"COBADEFFXXX"
-    },
-    "reference":"Invoice 2026-001",
-    "clientReference":"rev-2026-000001"
-  }'
-```
+Daily operators should not run terminal commands or call private APIs.
+Administrators can use the following references:
 
-## ISO 20022 XML upload
+- [Beginner Linux setup](docs/SANDBOX_SETUP_LINUX_BEGINNER.md)
+- [Sandbox deployment](docs/DIGITALOCEAN_DEPLOYMENT.md)
+- [System architecture](docs/ARCHITECTURE.md)
+- [ISO 20022 administrator reference](docs/ISO20022_IMPORT.md)
+- [Implementation status](docs/IMPLEMENTATION_CHECKLIST.md)
+- [Production readiness gates](docs/PRODUCTION_READINESS_GUIDE.md)
 
-Validate and preview a file without creating payment records:
+`docs/business.yml` is a vendor API specification retained for maintainers and
+tooling. It is not an operator guide and should not be edited as a procedure.
 
-```bash
-curl -X POST http://localhost:3000/v1/payment-imports/iso20022/validate \
-  -F 'file=@tests/fixtures/pain.001.001.09-valid.xml;type=application/xml' \
-  -F 'sourceAccountId=8d43a0d9-f040-4c98-b9de-89cf30ab9807'
-```
+Before releasing a change, administrators run:
 
-Prepare all valid payments after document validation, provider field discovery, beneficiary validation, quotation, and aggregate funds verification:
-
-```bash
-curl -X POST http://localhost:3000/v1/payment-imports/iso20022/prepare \
-  -F 'file=@tests/fixtures/pain.001.001.09-valid.xml;type=application/xml' \
-  -F 'sourceAccountId=8d43a0d9-f040-4c98-b9de-89cf30ab9807' \
-  -F 'atomic=true'
-```
-
-For a file containing multiple debtor accounts, map each normalized debtor account identifier to its Revolut account UUID rather than applying a blanket override:
-
-```bash
-curl -X POST http://localhost:3000/v1/payment-imports/iso20022/prepare \
-  -F 'file=@payment-batch.xml;type=application/xml' \
-  -F 'sourceAccountMap={"GB82WEST12345698765432":"8d43a0d9-f040-4c98-b9de-89cf30ab9807"}' \
-  -F 'atomic=true'
-```
-
-`atomic=true` is the default. Document-level integrity errors always reject the entire file. With `atomic=false`, individually invalid transactions are rejected while valid transactions may be prepared; this does not override document-level errors.
-
-Importing never sends money automatically. Each returned payment remains in `funds_confirmed` or `manual_review` until separately authorized and submitted:
-
-```bash
-curl -X POST http://localhost:3000/v1/payments/<PAYMENT_ID>/submit
-curl -X POST http://localhost:3000/v1/payments/<PAYMENT_ID>/reconcile
-curl http://localhost:3000/v1/payments/<PAYMENT_ID>
-```
-
-See `docs/ISO20022_IMPORT.md` for the field mapping, rejection model, security controls, and production gaps.
-
-## Verification
-
-```bash
+```text
 npm run check
 npm run build
-npm audit --audit-level=high
+npm run test:e2e
 ```
 
-## DigitalOcean Sandbox deployment
-
-The repository includes a containerized, SSH-driven deployment path for an
-Ubuntu 24.04 Droplet. The active Droplet runs `REVOLUT_MODE=sandbox`, refuses
-Production mode, and binds the API only to the Droplet loopback interface.
-Local development continues to default to the deterministic mock provider.
-
-Every merge to `master` is validated, deployed as an immutable commit-SHA
-release, and subjected to a prepared-only remote smoke test. The Droplet also
-runs a daily read-only monitor, a weekly prepared-only persistence test, and a
-weekly SQLite backup retaining the newest four verified local generations.
-
-See [`docs/DIGITALOCEAN_DEPLOYMENT.md`](docs/DIGITALOCEAN_DEPLOYMENT.md) for
-the one-time bootstrap, GitHub environment secrets, deployment, and rollback.
-
-For the non-technical, READ-only server connectivity check, see
-[`docs/SANDBOX_PHASE2_NON_TECHNICAL_GUIDE.md`](docs/SANDBOX_PHASE2_NON_TECHNICAL_GUIDE.md).
-
-For the dry-run-first, Sandbox-only account transfer test, see
-[`docs/SANDBOX_ACCOUNT_TRANSFER_TEST_GUIDE.md`](docs/SANDBOX_ACCOUNT_TRANSFER_TEST_GUIDE.md).
-
-For the loopback-only application mode backed by real Revolut Sandbox internal
-transfers, see [`docs/SANDBOX_LIVE_MODE.md`](docs/SANDBOX_LIVE_MODE.md).
-
-For routine checks, failure response, monitoring access, backup retention, and
-non-technical operating instructions, see
-[`docs/SANDBOX_OPERATIONS_RUNBOOK.md`](docs/SANDBOX_OPERATIONS_RUNBOOK.md).
-The private role-based console for one admin and one read-only user is covered
-in [`docs/SANDBOX_OPERATOR_CONSOLE.md`](docs/SANDBOX_OPERATOR_CONSOLE.md).
-The implemented controls and items deliberately deferred until live-conversion
-planning are summarized in
-[`docs/SANDBOX_CLOSEOUT_STATUS.md`](docs/SANDBOX_CLOSEOUT_STATUS.md).
-The separate, gated path toward read-only Production connectivity, draft-only
-testing, and an eventual controlled live-money pilot is documented in
-[`docs/PRODUCTION_READINESS_GUIDE.md`](docs/PRODUCTION_READINESS_GUIDE.md).
-The consolidated SQLite error monitor and the gated email-alert and
-fail-closed transaction-queue roadmap are documented in
-[`docs/ERROR_MONITORING_AND_OUTAGE_ROADMAP.md`](docs/ERROR_MONITORING_AND_OUTAGE_ROADMAP.md).
-
-## Important boundaries
-
-This scaffold does not bypass bank authorization, compliance, source-account ownership, beneficiary checks, transaction limits, or approval policy. It contains no certificates, private keys, refresh tokens, or access tokens.
-
-A successful upload proves only that the document survived the implemented parser and orchestration controls. It does not prove that funds are reserved, the beneficiary passed production Confirmation of Payee/Verification of Payee, Revolut accepted the transfer, or the receiving bank completed it. Those claims are promoted only from corresponding provider observations.
-
-Production submission must remain disabled until persistent idempotency, transactional batch controls, immutable audit events, source-account ownership reconciliation, XSD/Schematron validation, approval controls, webhook authentication, and Revolut sandbox contract tests pass.
-
-See `docs/ARCHITECTURE.md` and `docs/IMPLEMENTATION_CHECKLIST.md`.
+These are administrator commands, not operator procedures.

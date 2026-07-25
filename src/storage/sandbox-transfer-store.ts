@@ -37,6 +37,8 @@ export interface SandboxTransferStore extends OperationalErrorPersistence {
   listAuditEvents(limit: number): SandboxAuditEvent[];
   recordOperatorEvent(event: Omit<OperatorAuditEvent, 'id' | 'createdAt'>): void;
   listOperatorEvents(limit: number): OperatorAuditEvent[];
+  recordTotpStep(username: string, step: number): boolean;
+  consumeRecoveryCode(username: string, codeHash: string): boolean;
   summary(): { total: number; byState: Record<string, number>; latestUpdatedAt?: string };
   close(): void;
 }
@@ -125,6 +127,18 @@ export class SQLiteSandboxTransferStore implements SandboxTransferStore {
       );
       CREATE INDEX IF NOT EXISTS operator_audit_created_at
         ON operator_audit_events(created_at DESC);
+      CREATE TABLE IF NOT EXISTS operator_totp_steps (
+        username TEXT NOT NULL,
+        time_step INTEGER NOT NULL,
+        used_at TEXT NOT NULL,
+        PRIMARY KEY (username, time_step)
+      );
+      CREATE TABLE IF NOT EXISTS operator_recovery_codes_used (
+        username TEXT NOT NULL,
+        code_hash TEXT NOT NULL,
+        used_at TEXT NOT NULL,
+        PRIMARY KEY (username, code_hash)
+      );
       CREATE TABLE IF NOT EXISTS operational_errors (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         fingerprint TEXT NOT NULL UNIQUE,
@@ -247,6 +261,22 @@ export class SQLiteSandboxTransferStore implements SandboxTransferStore {
       details: JSON.parse(row.details_json) as Record<string, unknown>,
       createdAt: row.created_at
     }));
+  }
+
+  recordTotpStep(username: string, step: number) {
+    const result = this.database.prepare(`
+      INSERT OR IGNORE INTO operator_totp_steps (username, time_step, used_at)
+      VALUES (?, ?, ?)
+    `).run(username, step, new Date().toISOString());
+    return Number(result.changes) === 1;
+  }
+
+  consumeRecoveryCode(username: string, codeHash: string) {
+    const result = this.database.prepare(`
+      INSERT OR IGNORE INTO operator_recovery_codes_used (username, code_hash, used_at)
+      VALUES (?, ?, ?)
+    `).run(username, codeHash, new Date().toISOString());
+    return Number(result.changes) === 1;
   }
 
   summary() {

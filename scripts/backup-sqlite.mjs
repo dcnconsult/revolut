@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { backup, DatabaseSync } from 'node:sqlite';
 
 const sourcePath = process.env.SANDBOX_DATABASE_PATH ?? '/var/lib/revolut/sandbox-transfers.sqlite';
 const backupDirectory = process.env.SANDBOX_BACKUP_DIRECTORY ?? '/backups';
+const evidenceSource = process.env.CASE_EVIDENCE_ROOT ?? '/var/lib/revolut/evidence';
 const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 const destination = join(backupDirectory, `sandbox-transfers-${timestamp}.sqlite`);
 
@@ -18,4 +19,28 @@ try {
 
 const digest = createHash('sha256').update(await readFile(destination)).digest('hex');
 await writeFile(`${destination}.sha256`, `${digest}  ${destination.split('/').at(-1)}\n`, { mode: 0o600 });
-console.log(`SQLITE_BACKUP_OK file=${destination.split('/').at(-1)} checksum=sha256`);
+const evidenceDestination = join(backupDirectory, `case-evidence-${timestamp}`);
+await mkdir(evidenceDestination, { recursive: false, mode: 0o700 });
+await cp(evidenceSource, evidenceDestination, { recursive: true, errorOnExist: true });
+const evidenceHashes = [];
+for (const path of await recursiveFiles(evidenceDestination)) {
+  const relative = path.slice(evidenceDestination.length + 1).replaceAll('\\', '/');
+  const hash = createHash('sha256').update(await readFile(path)).digest('hex');
+  evidenceHashes.push(`${hash}  ${relative}`);
+}
+await writeFile(
+  join(evidenceDestination, 'BACKUP_MANIFEST.sha256'),
+  `${evidenceHashes.sort().join('\n')}\n`,
+  { mode: 0o600, flag: 'wx' }
+);
+console.log(`CASE_BACKUP_OK database=${destination.split('/').at(-1)} evidence=${evidenceDestination.split('/').at(-1)} checksums=sha256`);
+
+async function recursiveFiles(root) {
+  const files = [];
+  for (const entry of await readdir(root)) {
+    const path = join(root, entry);
+    if ((await stat(path)).isDirectory()) files.push(...await recursiveFiles(path));
+    else files.push(path);
+  }
+  return files;
+}

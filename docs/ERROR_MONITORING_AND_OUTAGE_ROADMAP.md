@@ -1,5 +1,23 @@
 # Error monitoring and outage roadmap
 
+**Audience:** operators should use only the immediate response below;
+maintainers own the implementation roadmap.
+
+## Immediate operator response
+
+1. Stop the current authorization or execution.
+2. Record the time, release, redacted case or transfer reference, and the
+   plain-language message.
+3. Do not retry a pending or ambiguous provider request.
+4. Use **Reconcile** when the application offers it.
+5. Escalate through the approved channel and wait for recorded recovery.
+
+Never include credentials, account details, package contents, balances,
+cookies, or authenticator codes. For the full routine, see
+[Daily Sandbox operations](SANDBOX_OPERATIONS_RUNBOOK.md).
+
+## Maintainer reference
+
 This module consolidates redacted Revolut Sandbox and application failures in
 the existing SQLite operations database. It is monitoring infrastructure, not
 a live-money queue.

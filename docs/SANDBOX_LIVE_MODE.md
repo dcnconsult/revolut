@@ -1,4 +1,10 @@
-# Live Revolut Sandbox mode
+# Connected Revolut Sandbox mode
+
+**Audience:** designated administrators and maintainers. Daily operators should
+use [Use the Sandbox operator console](SANDBOX_OPERATOR_CONSOLE.md).
+
+The word “connected” means the application can reach Revolut's test service.
+It does not mean Production, live customer data, or live money.
 
 `REVOLUT_MODE=sandbox` connects the loopback-only application API to the real
 Revolut Business Sandbox. It never selects the Production Business API.

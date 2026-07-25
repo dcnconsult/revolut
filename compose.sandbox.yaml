@@ -15,6 +15,28 @@ services:
       - ${OPERATOR_AUTH_CONFIG_FILE:-/etc/revolut/sandbox/operator-auth.json}:/run/secrets/operator-auth-config:ro
       - revolut-data:/var/lib/revolut
       - /var/backups/revolut:/var/backups/revolut:ro
+    depends_on:
+      clamav:
+        condition: service_healthy
+
+  clamav:
+    image: clamav/clamav:1.4
+    restart: unless-stopped
+    expose:
+      - "3310"
+    volumes:
+      - clamav-definitions:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /run/clamav:size=16m,mode=0755
 
 volumes:
   revolut-data:
+  clamav-definitions:

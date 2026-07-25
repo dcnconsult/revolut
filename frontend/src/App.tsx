@@ -69,6 +69,7 @@ export function App() {
         </div>
         <div className="user-panel">
           <span><strong>{session.username}</strong><small>{session.role === 'admin' ? 'Administrator' : 'Read only'}</small></span>
+          <HelpLink />
           <button className="button ghost" onClick={async () => {
             await api('/v1/operator/session', { method: 'DELETE' }, session.csrfToken);
             setSession(undefined);
@@ -85,6 +86,16 @@ function Shell({ children }: { children: React.ReactNode }) {
   return <><div className="sandbox-banner" role="region" aria-label="Environment warning">REVOLUT SANDBOX · NO LIVE DATA</div><main>{children}</main></>;
 }
 
+function HelpLink() {
+  return <a
+    className="button help-link"
+    href="/operator/help/index.html"
+    target="_blank"
+    rel="noopener noreferrer"
+    aria-label="Open operator guide in a new window"
+  >Operator guide <span aria-hidden="true">↗</span></a>;
+}
+
 function Login({ onLogin }: { onLogin: (session: Session) => void }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -96,7 +107,11 @@ function Login({ onLogin }: { onLogin: (session: Session) => void }) {
     try {
       onLogin(await api<Session>('/v1/operator/session', {
         method: 'POST',
-        body: JSON.stringify({ username: data.get('username'), password: data.get('password') })
+        body: JSON.stringify({
+          username: data.get('username'),
+          password: data.get('password'),
+          totp: data.get('totp')
+        })
       }));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Sign-in failed.');
@@ -105,12 +120,13 @@ function Login({ onLogin }: { onLogin: (session: Session) => void }) {
     }
   }
   return <section className="login-card">
-    <p className="eyebrow">Private access</p>
+    <div className="login-heading"><p className="eyebrow">Private access</p><HelpLink /></div>
     <h1>Sandbox operator sign in</h1>
     <p>Use the account supplied by your administrator. This console cannot access live Revolut data.</p>
     <form onSubmit={submit}>
       <label>Username<input name="username" autoComplete="username" required /></label>
       <label>Password<input name="password" type="password" autoComplete="current-password" required /></label>
+      <label>Authenticator or recovery code<input name="totp" inputMode="numeric" autoComplete="one-time-code" /></label>
       {error && <p className="error" role="alert">{error}</p>}
       <button className="button primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in securely'}</button>
     </form>
@@ -156,6 +172,7 @@ function Dashboard({ session, notify }: { session: Session; notify: (value: stri
   useEffect(() => { void refresh(); }, [refresh]);
 
   return <>
+    <CaseWorkflow session={session} notify={async value => { notify(value); await refresh(); }} />
     <section className="status-grid" aria-label="Sandbox status">
       <StatusCard label="Environment" value="Sandbox" detail="Live mode is disabled" tone="green" />
       <StatusCard label="Stored tests" value={String(summary?.total ?? '—')} detail={summary?.latestUpdatedAt ? `Updated ${formatDate(summary.latestUpdatedAt)}` : 'No tests yet'} />
@@ -171,6 +188,11 @@ function Dashboard({ session, notify }: { session: Session; notify: (value: stri
       />
     </section>
     {error && <p className="error" role="alert">{error}</p>}
+    <div className="section-intro">
+      <p className="eyebrow">Advanced diagnostic</p>
+      <h2>Direct owned-account transfer test</h2>
+      <p className="muted">This legacy tool is separate from case authorization and cannot use uploaded investor claims.</p>
+    </div>
     {session.role === 'admin' && status && <TransferWizard session={session} maximum={status.maximumAmountMinor} onDone={async value => { notify(value); await refresh(); }} />}
     <section className="two-column">
       <article className="panel">
@@ -223,6 +245,92 @@ function StatusCard({ label, value, detail, tone = '' }: { label: string; value:
   return <article className="status-card"><span className={`status-light ${tone}`} /><p>{label}</p><strong>{value}</strong><small>{detail}</small></article>;
 }
 
+interface CaseSummary {
+  id: string;
+  caseStatus: string;
+  fundingStatus: string;
+  executionStatus: string;
+  overallRisk: string;
+  hardBlockCount: number;
+  updatedAt: string;
+  nextAction: string;
+}
+
+function CaseWorkflow({
+  session,
+  notify
+}: {
+  session: Session;
+  notify: (message: string) => Promise<void>;
+}) {
+  const [cases, setCases] = useState<CaseSummary[]>([]);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(() => api<CaseSummary[]>('/v1/cases?limit=50')
+    .then(setCases)
+    .catch(caught => setError(caught instanceof Error ? caught.message : 'Case inbox could not be loaded.')), []);
+  useEffect(() => { void load(); }, [load]);
+
+  async function upload(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    try {
+      const result = await api<{ caseId: string }>('/v1/cases/submissions', {
+        method: 'POST',
+        body: data
+      }, session.csrfToken);
+      form.reset();
+      await notify(`Package stored in quarantine. Case ${result.caseId.slice(0, 8)} is being checked.`);
+      window.setTimeout(() => void load(), 250);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Package upload failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const steps = [
+    'Upload package',
+    'Review package health',
+    'Compare claims and findings',
+    'Add cited evidence',
+    'Match incoming credit',
+    'Approve or reject',
+    'Review payouts and fees',
+    'Authorize and execute',
+    'Reconcile and export'
+  ];
+  return <section className="panel case-workflow">
+    <div className="panel-heading">
+      <div><p className="eyebrow">Human-governed cases</p><h2>Funding case inbox</h2></div>
+      <button className="button ghost" onClick={() => void load()}>Refresh inbox</button>
+    </div>
+    <ol className="workflow-steps" aria-label="Case workflow">
+      {steps.map((step, index) => <li key={step}><span>{index + 1}</span>{step}</li>)}
+    </ol>
+    {session.role === 'admin' && <form className="upload-row" onSubmit={upload}>
+      <label>Private ZIP package<input name="package" type="file" accept=".zip,application/zip" required /></label>
+      <button className="button primary" disabled={busy}>{busy ? 'Storing safely…' : 'Upload to quarantine'}</button>
+    </form>}
+    {error && <p className="error" role="alert">{error}</p>}
+    {cases.length === 0
+      ? <p className="muted">No brokered-funding cases have been received.</p>
+      : <div className="table-wrap"><table><thead><tr>
+          <th>Case</th><th>Case review</th><th>Funds</th><th>Execution</th><th>Risk</th><th>What is needed next</th>
+        </tr></thead><tbody>{cases.map(item => <tr key={item.id}>
+          <td><code>{item.id.slice(0, 8)}</code><small>{formatDate(item.updatedAt)}</small></td>
+          <td><span className={`pill ${item.caseStatus.toLowerCase()}`}>{plainAction(item.caseStatus)}</span></td>
+          <td>{plainAction(item.fundingStatus)}</td>
+          <td>{plainAction(item.executionStatus)}</td>
+          <td>{plainAction(item.overallRisk)} · {item.hardBlockCount} block{item.hardBlockCount === 1 ? '' : 's'}</td>
+          <td className="message-cell">{item.nextAction}</td>
+        </tr>)}</tbody></table></div>}
+  </section>;
+}
+
 function TransferWizard({ session, maximum, onDone }: { session: Session; maximum: number; onDone: (message: string) => Promise<void> }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [prepared, setPrepared] = useState<Transfer>();
@@ -263,7 +371,11 @@ function TransferWizard({ session, maximum, onDone }: { session: Session; maximu
     try {
       const result = await api<Transfer>(`/v1/sandbox/internal-transfers/${prepared.id}/submit`, {
         method: 'POST',
-        body: JSON.stringify({ password: data.get('password'), confirmation: data.get('confirmation') })
+        body: JSON.stringify({
+          password: data.get('password'),
+          totp: data.get('totp'),
+          confirmation: data.get('confirmation')
+        })
       }, session.csrfToken);
       setPrepared(undefined);
       await onDone(`Sandbox transfer submitted. Current state: ${result.state}.`);
@@ -278,6 +390,7 @@ function TransferWizard({ session, maximum, onDone }: { session: Session; maximu
       <div className="review"><span>Amount<strong>{money(prepared.request.amountMinor, prepared.request.currency)}</strong></span><span>Environment<strong>Sandbox only</strong></span><span>Status<strong>Prepared — not sent</strong></span></div>
       <form onSubmit={submit}>
         <label>Re-enter your admin password<input name="password" type="password" autoComplete="current-password" required /></label>
+        <label>Fresh authenticator or recovery code<input name="totp" inputMode="numeric" autoComplete="one-time-code" /></label>
         <label>Type <code>{phrase}</code><input name="confirmation" autoComplete="off" required /></label>
         {error && <p className="error" role="alert">{error}</p>}
         <div className="actions"><button type="button" className="button ghost" onClick={() => setPrepared(undefined)}>Cancel</button><button className="button danger" disabled={busy}>{busy ? 'Submitting…' : 'Submit Sandbox transfer'}</button></div>

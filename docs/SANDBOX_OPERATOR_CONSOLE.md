@@ -1,82 +1,89 @@
-# Sandbox operator console
+# Use the Sandbox operator console
 
-The operator console gives non-technical staff a guided view of the Revolut
-Sandbox deployment. It is private, works only in Sandbox mode, and is not
-reachable directly from the internet.
+**Audience:** authorized administrators and read-only operators.
+
+The console is private and can use only synthetic Revolut Sandbox data. You do
+not need terminal or API knowledge for normal work.
 
 ## Open the console
 
-1. Open PowerShell on the authorized workstation.
-2. Keep this command running:
+1. If required, ask the administrator to start the private connection.
+2. Open the private application address supplied through the approved channel.
+3. Confirm the yellow banner says **REVOLUT SANDBOX · NO LIVE DATA**.
+4. Sign in with your own username and password.
+5. Enter the current six-digit authenticator code.
+6. Select **Operator guide ↗**. It opens in a separate window so you can keep
+   the guide beside the application.
 
-   ```powershell
-   ssh -i C:\Users\novot\.ssh\revolut_deploy -L 3300:127.0.0.1:3000 deploy@178.128.36.90
-   ```
+Do not use a bookmarked address if the Sandbox banner is missing or different.
 
-3. Open `http://127.0.0.1:3300/operator/` in Chrome.
-4. Sign in with the admin or read-only credentials supplied privately.
-5. Confirm the yellow **REVOLUT SANDBOX · NO LIVE DATA** banner is visible.
+## Understand your access
 
-The read-only user can see health, backups, deployment status, redacted
-transfers, and redacted audit events. The read-only user cannot retrieve
-account balances or perform a transfer.
+An **Administrator** can upload packages, record findings and amendments, make
+decisions, create plans, and complete guarded Sandbox execution.
 
-## Run an admin Sandbox transfer
+A **Read only** user can inspect redacted status, cases, transfers, errors, and
+audit history. They cannot retrieve sensitive account details or change state.
 
-1. Sign in as the admin.
-2. Choose an eligible account pair under **Run a controlled Sandbox transfer**.
-3. Enter an amount from `0.01` through the ceiling shown on screen.
-4. Select **Prepare test**. Preparation validates the request but does not move
-   Sandbox funds.
-5. Review the amount, environment, and prepared state.
-6. Re-enter the admin password and type the exact phrase shown on screen.
-7. Select **Submit Sandbox transfer** once.
+Accounts belong to individuals. Never share a password, authenticator code,
+recovery code, or browser session.
 
-Prepared transfers expire after 15 minutes. Every submission repeats the
-account, currency, balance, amount, and idempotency checks. Never retry a
-submitted record merely because its state is pending.
+## Read the top status cards
 
-## Account and credential rules
+1. **Environment** must say **Sandbox**.
+2. **Operations** should say **Clear**. Degraded or Blocked needs review.
+3. **Backup** should say **Fresh** before authorization.
+4. **Access** confirms whether you are Administrator or Read only.
+5. **Deployment** identifies the running release for support.
 
-- There is exactly one admin and one read-only human account.
-- Passwords are displayed only during one-time provisioning and must be stored
-  in the organization password manager.
-- Five failed sign-in attempts within 15 minutes trigger a temporary limit.
-- Sessions expire after 30 minutes without activity or eight hours overall.
-- Deployments may require users to sign in again.
-- The machine automation token cannot submit or reconcile transfers.
+The other cards summarize stored tests and the small diagnostic transfer
+ceiling. They do not authorize a funding-case payout.
 
-Provision the accounts once on the Droplet, as root:
+## Work the case inbox
 
-```bash
-bash /opt/revolut/current/scripts/deploy/provision-operator-access.sh
-```
+Use the workflow in [Work a brokered-funding case](BROKERED_FUNDING_CASES.md):
 
-The script refuses to overwrite existing credentials.
+1. Upload to quarantine.
+2. Review package health.
+3. Compare claims and findings.
+4. Add cited evidence.
+5. Match the incoming Sandbox credit.
+6. Make a decision.
+7. Review the exact plan.
+8. Authorize and execute.
+9. Reconcile and export evidence.
 
-## Text-mode fallback on the Droplet
+Complete the steps in order. A package claim, funding match, case approval, and
+plan authorization are four different controls.
 
-When Chrome or an SSH tunnel is unavailable, sign in to the DigitalOcean web
-console or an interactive SSH session and run:
+## Use the direct transfer diagnostic
 
-```bash
-bash /opt/revolut/current/scripts/deploy/run-operator-console.sh
-```
+The **Direct owned-account transfer test** is an advanced diagnostic. It is not
+part of a funding case and cannot rely on uploaded claims.
 
-The text console requires the same admin or read-only username and password as
-the browser console. Password entry is masked. It connects only to the API
-inside the running loopback-bound container and refuses to start if the
-container is not private.
+Use it only when an administrator has requested a controlled connectivity
+test. Follow [Sandbox account transfer test](SANDBOX_ACCOUNT_TRANSFER_TEST_GUIDE.md).
 
-The read-only menu provides service, release, backup, transfer, audit, and
-consolidated operational-error status. The admin menu additionally provides
-owned-account listing, transfer preparation, guarded submission, and status
-reconciliation. Submission still requires the admin password and the exact
-amount-specific phrase. Closing the terminal or choosing **Sign out and exit**
-ends the session.
+## Sign out safely
 
-## If something fails
+1. Finish or save the current review.
+2. Select **Sign out**.
+3. Close both the application and guide windows.
+4. Close the private connection if your administrator instructed you to do so.
 
-Copy only the plain-language error and time. Do not copy account identifiers,
-balances, passwords, tokens, cookies, or browser developer-tool output into an
-issue or chat message. Follow `SANDBOX_OPERATIONS_RUNBOOK.md` for escalation.
+Sessions expire automatically after inactivity. A deployment may also require
+you to sign in again.
+
+## If the console does not open
+
+1. Confirm the private connection is running.
+2. Retry the approved application address once.
+3. Record the time, the page heading, and the plain-language error.
+4. Contact the administrator.
+
+Do not paste screenshots containing case details, account identifiers,
+balances, passwords, tokens, cookies, authenticator codes, or browser
+developer-tool output into email, chat, or an issue.
+
+Administrator-only console provisioning and text-mode recovery are covered in
+[DigitalOcean deployment](DIGITALOCEAN_DEPLOYMENT.md).
