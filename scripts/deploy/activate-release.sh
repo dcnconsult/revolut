@@ -90,7 +90,12 @@ export IMAGE_TAG="${release_sha}"
 export REVOLUT_ENV_FILE="${env_file}"
 
 docker compose "${compose_args[@]}" build --pull
-if ! docker compose "${compose_args[@]}" up -d --remove-orphans --wait --wait-timeout 90; then
+candidate_wait_timeout=90
+if [[ "${revolut_mode}" == "sandbox" ]]; then
+  candidate_wait_timeout=360
+fi
+if ! docker compose "${compose_args[@]}" up -d --remove-orphans --wait \
+  --wait-timeout "${candidate_wait_timeout}"; then
   echo "Candidate release failed to start; attempting rollback." >&2
   rollback_previous_release || true
   exit 1

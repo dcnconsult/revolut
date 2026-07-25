@@ -22,6 +22,12 @@ services:
   clamav:
     image: clamav/clamav:1.4
     restart: unless-stopped
+    environment:
+      CLAMD_CONF_MaxThreads: "2"
+      CLAMD_CONF_MaxQueue: "4"
+      CLAMD_CONF_ConcurrentDatabaseReload: "no"
+      CLAMD_CONF_StreamMaxLength: "12M"
+      FRESHCLAM_CHECKS: "1"
     expose:
       - "3310"
     volumes:
@@ -31,8 +37,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 10
-      start_period: 120s
-    read_only: true
+      start_period: 300s
     tmpfs:
       - /tmp:size=64m,mode=1777
       - /run/clamav:size=16m,mode=0755
