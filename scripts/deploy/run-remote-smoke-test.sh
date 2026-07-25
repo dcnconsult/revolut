@@ -131,6 +131,16 @@ submit_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --m
   "http://127.0.0.1:3000/v1/sandbox/internal-transfers/${record_id}/submit")"
 [[ "${submit_status}" == "403" ]]
 
+smoke_step="text-console"
+docker exec revolut-api-1 test -r scripts/operator/console-core.mjs
+set +e
+text_console_output="$(docker exec revolut-api-1 \
+  node scripts/operator/console.mjs 2>&1)"
+text_console_status=$?
+set -e
+[[ "${text_console_status}" == "2" ]]
+[[ "${text_console_output}" == *"requires an interactive terminal"* ]]
+
 smoke_step="backup"
 bash "${current_release}/scripts/deploy/backup-sandbox-database.sh" >/dev/null
 latest_checksum="$(find /var/backups/revolut -maxdepth 1 -type f -name '*.sha256' \
@@ -142,4 +152,4 @@ latest_checksum="$(find /var/backups/revolut -maxdepth 1 -type f -name '*.sha256
 )
 
 trap - ERR
-echo "REMOTE_SMOKE_OK mode=sandbox transfer=prepared-only idempotency=ok persistence=ok monitoring=ok backup=ok bind=loopback"
+echo "REMOTE_SMOKE_OK mode=sandbox transfer=prepared-only idempotency=ok persistence=ok monitoring=ok text_console=ok backup=ok bind=loopback"

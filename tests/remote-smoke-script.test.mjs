@@ -21,6 +21,8 @@ describe('remote Sandbox smoke-test safety', () => {
     expect(script).toContain('/sandbox/monitoring/audit-events');
     expect(script).toContain('backup-sandbox-database.sh');
     expect(script).toContain('127.0.0.1:3000');
+    expect(script).toContain('smoke_step="text-console"');
+    expect(script).toContain('requires an interactive terminal');
   });
 
   it('requires Sandbox mode and an immutable release commit', () => {
