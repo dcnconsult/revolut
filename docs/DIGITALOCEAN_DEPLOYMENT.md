@@ -13,6 +13,11 @@ The Droplet currently runs the Revolut Business Sandbox internal-transfer
 provider. Sandbox and Production remain separate, and this deployment does not
 make the scaffold suitable for live-money submission.
 
+The private malware scanner is memory intensive. A 2 GB Droplet is the minimum
+constrained Sandbox trial size; 4 GB is preferred. Deployment waits up to six
+minutes for its first signature load and rolls back if the scanner or API does
+not become healthy.
+
 ## Security model
 
 - The API container is bound only to `127.0.0.1:3000` on the Droplet.
