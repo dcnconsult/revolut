@@ -112,6 +112,30 @@ async function showOperatorEvents() {
   }
 }
 
+async function showOperationalErrors() {
+  const [report, errors] = await Promise.all([
+    client.errorReport(),
+    client.operationalErrors(25)
+  ]);
+  heading('Consolidated operational report');
+  console.log(`Health:             ${report.health}`);
+  console.log(`Unresolved:         ${report.unresolved}`);
+  console.log(`Critical / warning: ${report.critical} / ${report.warning}`);
+  console.log(`Retryable:          ${report.retryable}`);
+  console.log(`Total occurrences:  ${report.totalOccurrences}`);
+  if (errors.length === 0) return console.log('No operational errors have been recorded.');
+  console.log('\nLAST SEEN                 OPERATION             CATEGORY              COUNT  STATUS');
+  for (const error of errors) {
+    const status = error.resolvedAt ? 'resolved' : error.retryable ? 'retryable' : 'review';
+    console.log(
+      `${error.lastOccurredAt.padEnd(25)} ` +
+      `${error.operation.padEnd(21)} ${error.category.padEnd(21)} ` +
+      `${String(error.occurrenceCount).padEnd(6)} ${status}`
+    );
+    console.log(`  ${error.safeMessage}`);
+  }
+}
+
 async function showAccounts() {
   heading('Owned Sandbox accounts');
   const accounts = await client.accounts();
@@ -197,11 +221,12 @@ function menu(role) {
   console.log('2. Recent transfers');
   console.log('3. Transfer audit');
   console.log('4. Operator audit');
+  console.log('5. Operational error report');
   if (role === 'admin') {
-    console.log('5. List owned Sandbox accounts');
-    console.log('6. Prepare Sandbox transfer');
-    console.log('7. Submit prepared Sandbox transfer');
-    console.log('8. Refresh submitted transfer status');
+    console.log('6. List owned Sandbox accounts');
+    console.log('7. Prepare Sandbox transfer');
+    console.log('8. Submit prepared Sandbox transfer');
+    console.log('9. Refresh submitted transfer status');
   }
   console.log('0. Sign out and exit');
 }
@@ -223,10 +248,11 @@ async function run() {
       else if (choice === '2') await showTransfers();
       else if (choice === '3') await showTransferEvents();
       else if (choice === '4') await showOperatorEvents();
-      else if (choice === '5' && session.role === 'admin') await showAccounts();
-      else if (choice === '6' && session.role === 'admin') await prepareTransfer();
-      else if (choice === '7' && session.role === 'admin') await submitTransfer();
-      else if (choice === '8' && session.role === 'admin') await reconcileTransfer();
+      else if (choice === '5') await showOperationalErrors();
+      else if (choice === '6' && session.role === 'admin') await showAccounts();
+      else if (choice === '7' && session.role === 'admin') await prepareTransfer();
+      else if (choice === '8' && session.role === 'admin') await submitTransfer();
+      else if (choice === '9' && session.role === 'admin') await reconcileTransfer();
       else console.log('That action is not available for this account.');
     } catch (error) {
       console.error(`Action failed: ${error instanceof Error ? error.message : 'Unknown error.'}`);

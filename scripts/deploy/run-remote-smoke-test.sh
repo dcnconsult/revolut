@@ -116,12 +116,22 @@ transfers_response="$(curl --fail --silent --show-error --max-time 15 \
 audit_response="$(curl --fail --silent --show-error --max-time 15 \
   --header "authorization: Bearer ${automation_token}" \
   'http://127.0.0.1:3000/v1/sandbox/monitoring/audit-events?limit=500')"
+error_report_response="$(curl --fail --silent --show-error --max-time 15 \
+  --header "authorization: Bearer ${automation_token}" \
+  http://127.0.0.1:3000/v1/sandbox/monitoring/error-report)"
+errors_response="$(curl --fail --silent --show-error --max-time 15 \
+  --header "authorization: Bearer ${automation_token}" \
+  'http://127.0.0.1:3000/v1/sandbox/monitoring/errors?limit=25')"
 jq -e --arg record_id "${record_id}" \
   'any(.[]; .id == $record_id and .state == "prepared")' \
   <<<"${transfers_response}" >/dev/null
 jq -e --arg record_id "${record_id}" \
   'any(.[]; .transferId == $record_id and .eventType == "prepared" and .state == "prepared")' \
   <<<"${audit_response}" >/dev/null
+jq -e '.health != "blocked" and .critical == 0' \
+  <<<"${error_report_response}" >/dev/null
+jq -e 'type == "array"' <<<"${errors_response}" >/dev/null
+operations_health="$(jq -r '.health' <<<"${error_report_response}")"
 
 smoke_step="automation-submit-denied"
 submit_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 15 \
@@ -152,4 +162,4 @@ latest_checksum="$(find /var/backups/revolut -maxdepth 1 -type f -name '*.sha256
 )
 
 trap - ERR
-echo "REMOTE_SMOKE_OK mode=sandbox transfer=prepared-only idempotency=ok persistence=ok monitoring=ok text_console=ok backup=ok bind=loopback"
+echo "REMOTE_SMOKE_OK mode=sandbox transfer=prepared-only idempotency=ok persistence=ok monitoring=ok operations=${operations_health} text_console=ok backup=ok bind=loopback"

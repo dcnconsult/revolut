@@ -1,12 +1,19 @@
 import { createPrivateKey } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 import { SignJWT } from 'jose';
+import {
+  classifyHttpStatus,
+  OperationalFault
+} from '../operations/operational-error-monitor.js';
 
 export const REVOLUT_SANDBOX_API_BASE_URL = 'https://sandbox-b2b.revolut.com/api/1.0';
 
 const CLIENT_ASSERTION_AUDIENCE = 'https://revolut.com';
 const CLIENT_ASSERTION_TYPE = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer';
 const REFRESH_MARGIN_MS = 60_000;
+const API_TIMEOUT_MS = 8_000;
+const MAX_TRANSIENT_RETRIES = 2;
 
 export interface RevolutSandboxAccount {
   id: string;
@@ -61,6 +68,7 @@ interface CachedToken {
 
 export class RevolutSandboxClient implements SandboxInternalTransferClient {
   private cachedToken: CachedToken | undefined;
+  private tokenRefreshInFlight: Promise<string> | undefined;
 
   constructor(
     private readonly files: SandboxCredentialFiles,
@@ -104,18 +112,42 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
     if (!path.startsWith('/')) throw new Error('Sandbox API path must start with /.');
     const credentials = await this.loadCredentials();
     let accessToken = await this.getAccessToken(credentials);
-    let response = await this.fetchApi(credentials.baseUrl, path, accessToken, options);
-    if (response.status === 401) {
-      this.cachedToken = undefined;
-      accessToken = await this.getAccessToken(credentials);
-      response = await this.fetchApi(credentials.baseUrl, path, accessToken, options);
+    let authenticationRetried = false;
+    let transientRetries = 0;
+    for (;;) {
+      let response: Response;
+      try {
+        response = await this.fetchApi(credentials.baseUrl, path, accessToken, options);
+      } catch {
+        if (transientRetries < MAX_TRANSIENT_RETRIES) {
+          await delay(this.retryDelay(undefined, transientRetries++));
+          continue;
+        }
+        throw new OperationalFault(
+          `Revolut Sandbox ${options.method ?? 'GET'} ${path} failed because the network was unavailable.`,
+          { category: 'network', severity: 'critical', retryable: true }
+        );
+      }
+      if (response.status === 401 && !authenticationRetried) {
+        authenticationRetried = true;
+        this.cachedToken = undefined;
+        accessToken = await this.getAccessToken(credentials);
+        continue;
+      }
+      if ((response.status === 429 || response.status >= 500) &&
+          transientRetries < MAX_TRANSIENT_RETRIES) {
+        await delay(this.retryDelay(response, transientRetries++));
+        continue;
+      }
+      const payload = await this.readResponse(response);
+      if (!response.ok) {
+        throw new OperationalFault(
+          `Revolut Sandbox ${options.method ?? 'GET'} ${path} failed (HTTP ${response.status}).`,
+          classifyHttpStatus(response.status)
+        );
+      }
+      return payload;
     }
-    const payload = await this.readResponse(response);
-    if (!response.ok) {
-      const detail = this.errorDetail(payload);
-      throw new Error(`Revolut Sandbox ${options.method ?? 'GET'} ${path} failed (HTTP ${response.status}): ${detail}`);
-    }
-    return payload;
   }
 
   private async fetchApi(
@@ -130,6 +162,7 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
         Authorization: `Bearer ${accessToken}`,
         ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' })
       },
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) })
     });
   }
@@ -138,7 +171,16 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
     if (this.cachedToken && this.cachedToken.expiresAt - Date.now() > REFRESH_MARGIN_MS) {
       return this.cachedToken.value;
     }
+    if (this.tokenRefreshInFlight) return this.tokenRefreshInFlight;
+    this.tokenRefreshInFlight = this.refreshAccessToken(credentials);
+    try {
+      return await this.tokenRefreshInFlight;
+    } finally {
+      this.tokenRefreshInFlight = undefined;
+    }
+  }
 
+  private async refreshAccessToken(credentials: Awaited<ReturnType<RevolutSandboxClient['loadCredentials']>>) {
     const privateKey = createPrivateKey(await readFile(this.files.privateKeyPath, 'utf8'));
     const now = Math.floor(Date.now() / 1000);
     const assertion = await new SignJWT({})
@@ -153,6 +195,7 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
     const response = await this.fetchImplementation(`${credentials.baseUrl}/auth/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
       body: new URLSearchParams({
         grant_type: 'refresh_token',
         refresh_token: credentials.refreshToken,
@@ -164,7 +207,12 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
     const accessToken = this.stringField(payload, 'access_token');
     const expiresIn = Number(this.field(payload, 'expires_in'));
     if (!response.ok || !accessToken || !Number.isFinite(expiresIn) || expiresIn <= 0) {
-      throw new Error(`Revolut Sandbox token refresh failed (HTTP ${response.status}): ${this.errorDetail(payload)}`);
+      throw new OperationalFault(
+        `Revolut Sandbox token refresh failed (HTTP ${response.status}).`,
+        response.ok
+          ? { category: 'invalid_response', severity: 'critical', retryable: false }
+          : classifyHttpStatus(response.status)
+      );
     }
     this.cachedToken = { value: accessToken, expiresAt: Date.now() + expiresIn * 1000 };
     return accessToken;
@@ -234,15 +282,27 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
     try {
       return JSON.parse(text) as unknown;
     } catch {
-      throw new Error(`Revolut Sandbox returned a non-JSON response (HTTP ${response.status}).`);
+      throw new OperationalFault(
+        `Revolut Sandbox returned a non-JSON response (HTTP ${response.status}).`,
+        {
+          category: 'invalid_response',
+          severity: 'critical',
+          retryable: response.status >= 500,
+          httpStatus: response.status
+        }
+      );
     }
   }
 
-  private errorDetail(value: unknown) {
-    return this.stringField(value, 'error_description') ||
-      this.stringField(value, 'message') ||
-      this.stringField(value, 'error') ||
-      'No error details.';
+  private retryDelay(response: Response | undefined, attempt: number) {
+    const retryAfter = response?.headers.get('retry-after');
+    if (retryAfter) {
+      const seconds = Number(retryAfter);
+      if (Number.isFinite(seconds)) return Math.min(Math.max(seconds * 1_000, 0), 2_000);
+      const dateDelay = Date.parse(retryAfter) - Date.now();
+      if (Number.isFinite(dateDelay)) return Math.min(Math.max(dateDelay, 0), 2_000);
+    }
+    return Math.min(250 * (2 ** attempt), 2_000);
   }
 
   private field(value: unknown, key: string) {

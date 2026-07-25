@@ -52,6 +52,14 @@ export class OperatorConsoleClient {
     return this.get(`/v1/sandbox/monitoring/operator-events?limit=${limit}`);
   }
 
+  errorReport() {
+    return this.get('/v1/sandbox/monitoring/error-report');
+  }
+
+  operationalErrors(limit = 25) {
+    return this.get(`/v1/sandbox/monitoring/errors?limit=${limit}`);
+  }
+
   accounts() {
     return this.get('/v1/sandbox/accounts');
   }

@@ -20,7 +20,12 @@ const server = setupServer(
     transferRef: 'abcd1234', state: 'prepared', amountMinor: 1, currency: 'GBP',
     reference: 'Sandbox test', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
   }])),
-  http.get('/v1/sandbox/monitoring/operator-events', () => HttpResponse.json([]))
+  http.get('/v1/sandbox/monitoring/operator-events', () => HttpResponse.json([])),
+  http.get('/v1/sandbox/monitoring/error-report', () => HttpResponse.json({
+    health: 'clear', unresolved: 0, critical: 0, warning: 0, retryable: 0,
+    totalOccurrences: 0, byCategory: {}, generatedAt: new Date().toISOString()
+  })),
+  http.get('/v1/sandbox/monitoring/errors', () => HttpResponse.json([]))
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
@@ -35,6 +40,8 @@ describe('operator console', () => {
     expect(await screen.findByText('abcd1234')).toBeInTheDocument();
     expect(screen.queryByText('Run a controlled Sandbox transfer')).not.toBeInTheDocument();
     expect(screen.getByText(/NO LIVE DATA/)).toBeInTheDocument();
+    expect(await screen.findByText('Consolidated operational report')).toBeInTheDocument();
+    expect(screen.getByText('No operational errors have been recorded.')).toBeInTheDocument();
   });
 
   it('shows the sign-in form when no session exists', async () => {

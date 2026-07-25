@@ -83,6 +83,25 @@ from an interactive Droplet console:
 bash /opt/revolut/current/scripts/deploy/run-operator-console.sh
 ```
 
+## Operational errors
+
+The browser and text consoles include a consolidated error report backed by
+the same SQLite operations database. Repeated failures are grouped, messages
+are redacted before storage, and a successful call resolves earlier errors for
+that operation.
+
+- `clear`: no unresolved errors.
+- `degraded`: review warnings before continuing.
+- `blocked`: stop transfer submission and escalate to the administrator.
+
+The daily remote monitor treats `blocked` as a failure and uses the existing
+deduplicated GitHub `[Ops]` issue path. Email alerts and a fail-closed
+transaction-intent queue are future gated phases; neither is active.
+
+See
+[`ERROR_MONITORING_AND_OUTAGE_ROADMAP.md`](ERROR_MONITORING_AND_OUTAGE_ROADMAP.md)
+for the HTTP error playbook, redaction rules, and queue safety requirements.
+
 ## Transfer states
 
 | State | Meaning | Routine action |

@@ -55,6 +55,13 @@ code { padding: 2px 5px; border-radius: 5px; background: #eef2f0; }
 .pill.completed { color: #11643e; background: #dcf4e8; }
 .pill.failed, .pill.declined, .pill.reverted { color: #8a2323; background: #fae4e4; }
 .pill.prepared { color: #745a00; background: #fff2be; }
+.pill.clear { color: #11643e; background: #dcf4e8; }
+.pill.degraded, .pill.warning { color: #745a00; background: #fff2be; }
+.pill.blocked, .pill.critical { color: #8a2323; background: #fae4e4; }
+.status-light.degraded { background: #d19b3d; box-shadow: 0 0 0 4px #fff2be; }
+.status-light.blocked { background: #b12d2d; box-shadow: 0 0 0 4px #fae4e4; }
+.operations-panel { margin-top: 18px; }
+.message-cell { min-width: 280px; white-space: normal; }
 .timeline { display: grid; gap: 4px; margin-top: 14px; }
 .timeline-row { display: grid; grid-template-columns: 12px 1fr; gap: 10px; align-items: start; padding: 10px 0; }
 .timeline-row div { display: grid; gap: 3px; }

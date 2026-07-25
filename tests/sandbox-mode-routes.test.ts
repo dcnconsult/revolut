@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import type { SandboxInternalTransferClient } from '../src/adapters/revolut-sandbox-client.js';
+import { OperationalFault } from '../src/operations/operational-error-monitor.js';
 import { buildApp } from '../src/server.js';
 
 const client: SandboxInternalTransferClient = {
@@ -173,6 +174,79 @@ describe('Sandbox server mode', () => {
       payload: {}
     });
     expect(submit.statusCode).toBe(403);
+  });
+
+  it('persists redacted provider failures and resolves them after recovery', async () => {
+    const recoveringClient: SandboxInternalTransferClient = {
+      getAccounts: vi.fn()
+        .mockRejectedValueOnce(new OperationalFault(
+          'Provider failed for 11111111-1111-4111-8111-111111111111 with Bearer secret-token',
+          {
+            category: 'rate_limit',
+            severity: 'warning',
+            retryable: true,
+            httpStatus: 429
+          }
+        ))
+        .mockResolvedValue([
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            name: 'GBP source',
+            currency: 'GBP',
+            balance: 20,
+            state: 'active'
+          }
+        ]),
+      createInternalTransfer: vi.fn(),
+      getTransaction: vi.fn()
+    };
+    app = buildApp({
+      mode: 'sandbox',
+      sandboxClient: recoveringClient,
+      sandboxDatabasePath: ':memory:'
+    });
+    const auth = await login('viewer', 'viewer-test-password');
+    const admin = await login();
+    const failed = await app.inject({
+      method: 'GET',
+      url: '/v1/sandbox/accounts',
+      headers: { cookie: admin.cookie }
+    });
+    expect(failed.statusCode).toBe(500);
+    expect(failed.body).not.toContain('11111111');
+    expect(failed.body).not.toContain('secret-token');
+
+    const report = await app.inject({
+      method: 'GET',
+      url: '/v1/sandbox/monitoring/error-report',
+      headers: { cookie: auth.cookie }
+    });
+    expect(report.json()).toMatchObject({
+      health: 'degraded',
+      unresolved: 1,
+      warning: 1,
+      retryable: 1
+    });
+    const errors = await app.inject({
+      method: 'GET',
+      url: '/v1/sandbox/monitoring/errors?limit=25',
+      headers: { cookie: auth.cookie }
+    });
+    expect(errors.statusCode).toBe(200);
+    expect(errors.body).toContain('[id]');
+    expect(errors.body).not.toContain('secret-token');
+
+    expect((await app.inject({
+      method: 'GET',
+      url: '/v1/sandbox/accounts',
+      headers: { cookie: admin.cookie }
+    })).statusCode).toBe(200);
+    const recovered = await app.inject({
+      method: 'GET',
+      url: '/v1/sandbox/monitoring/error-report',
+      headers: { cookie: auth.cookie }
+    });
+    expect(recovered.json()).toMatchObject({ health: 'clear', unresolved: 0 });
   });
 
   it('refuses production mode', () => {

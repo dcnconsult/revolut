@@ -30,6 +30,9 @@ describe('scheduled remote operations', () => {
   it('keeps the daily monitor read-only and non-sensitive', () => {
     expect(monitorScript).toContain('run-sandbox-phase2-check.sh');
     expect(monitorScript).toContain('monitoring/summary');
+    expect(monitorScript).toContain('monitoring/error-report');
+    expect(monitorScript).toContain('.health != "blocked"');
+    expect(monitorScript).toContain('/v1/sandbox/accounts');
     expect(monitorScript).toContain('sha256sum --check --status');
     expect(monitorScript).not.toContain('/submit');
     expect(monitorScript).not.toContain('/prepare');
