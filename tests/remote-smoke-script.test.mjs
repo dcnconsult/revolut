@@ -19,6 +19,8 @@ describe('remote Sandbox smoke-test safety', () => {
     expect(script).toContain('docker restart revolut-api-1');
     expect(script).toContain('/sandbox/monitoring/transfers');
     expect(script).toContain('/sandbox/monitoring/audit-events');
+    expect(script).toContain('/sandbox/monitoring/error-report');
+    expect(script).toContain('/sandbox/monitoring/errors');
     expect(script).toContain('backup-sandbox-database.sh');
     expect(script).toContain('127.0.0.1:3000');
     expect(script).toContain('smoke_step="text-console"');

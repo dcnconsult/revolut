@@ -11,6 +11,31 @@ interface Status {
   generatedAt: string;
 }
 
+interface OperationalErrorReport {
+  health: 'clear' | 'degraded' | 'blocked';
+  unresolved: number;
+  critical: number;
+  warning: number;
+  retryable: number;
+  totalOccurrences: number;
+  byCategory: Record<string, number>;
+  latestOccurredAt?: string;
+  generatedAt: string;
+}
+
+interface OperationalError {
+  id: number;
+  category: string;
+  severity: 'warning' | 'critical';
+  operation: string;
+  safeMessage: string;
+  retryable: boolean;
+  httpStatus?: number;
+  occurrenceCount: number;
+  lastOccurredAt: string;
+  resolvedAt?: string;
+}
+
 interface OperatorEvent {
   id?: number;
   actor?: string;
@@ -97,16 +122,33 @@ function Dashboard({ session, notify }: { session: Session; notify: (value: stri
   const [status, setStatus] = useState<Status>();
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [events, setEvents] = useState<OperatorEvent[]>([]);
+  const [errorReport, setErrorReport] = useState<OperationalErrorReport>();
+  const [operationalErrors, setOperationalErrors] = useState<OperationalError[]>([]);
   const [error, setError] = useState('');
   const refresh = useCallback(async () => {
     try {
-      const [nextSummary, nextStatus, nextTransfers, nextEvents] = await Promise.all([
+      const [
+        nextSummary,
+        nextStatus,
+        nextTransfers,
+        nextEvents,
+        nextErrorReport,
+        nextOperationalErrors
+      ] = await Promise.all([
         api<Summary>('/v1/sandbox/monitoring/summary'),
         api<Status>('/v1/sandbox/operator-status'),
         api<Transfer[]>('/v1/sandbox/monitoring/transfers?limit=25'),
-        api<OperatorEvent[]>('/v1/sandbox/monitoring/operator-events?limit=25')
+        api<OperatorEvent[]>('/v1/sandbox/monitoring/operator-events?limit=25'),
+        api<OperationalErrorReport>('/v1/sandbox/monitoring/error-report'),
+        api<OperationalError[]>('/v1/sandbox/monitoring/errors?limit=25')
       ]);
-      setSummary(nextSummary); setStatus(nextStatus); setTransfers(nextTransfers); setEvents(nextEvents); setError('');
+      setSummary(nextSummary);
+      setStatus(nextStatus);
+      setTransfers(nextTransfers);
+      setEvents(nextEvents);
+      setErrorReport(nextErrorReport);
+      setOperationalErrors(nextOperationalErrors);
+      setError('');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Dashboard could not be refreshed.');
     }
@@ -121,6 +163,12 @@ function Dashboard({ session, notify }: { session: Session; notify: (value: stri
       <StatusCard label="Backup" value={status?.backup ? title(status.backup.state) : '—'} detail={status?.backup?.latestAt ? `Saved ${formatDate(status.backup.latestAt)}` : 'No recent backup timestamp'} tone={status?.backup?.state === 'fresh' ? 'green' : ''} />
       <StatusCard label="Deployment" value={status?.release ?? '—'} detail="Active release identifier" />
       <StatusCard label="Access" value={session.role === 'admin' ? 'Admin' : 'Read only'} detail="Enforced by the server" />
+      <StatusCard
+        label="Operations"
+        value={errorReport ? title(errorReport.health) : '—'}
+        detail={errorReport ? `${errorReport.unresolved} unresolved · ${errorReport.totalOccurrences} occurrences` : 'Error report unavailable'}
+        tone={errorReport?.health === 'clear' ? 'green' : errorReport?.health ?? ''}
+      />
     </section>
     {error && <p className="error" role="alert">{error}</p>}
     {session.role === 'admin' && status && <TransferWizard session={session} maximum={status.maximumAmountMinor} onDone={async value => { notify(value); await refresh(); }} />}
@@ -145,6 +193,28 @@ function Dashboard({ session, notify }: { session: Session; notify: (value: stri
             <div><strong>{plainAction(event.action)}</strong><small>{event.outcome} · {formatDate(event.createdAt)}</small></div>
           </div>)}</div>
       </article>
+    </section>
+    <section className="panel operations-panel">
+      <div className="panel-heading">
+        <div><p className="eyebrow">Error monitor</p><h2>Consolidated operational report</h2></div>
+        <span className={`pill ${errorReport?.health ?? ''}`}>{errorReport ? title(errorReport.health) : 'Unavailable'}</span>
+      </div>
+      <p className="muted">
+        Messages are redacted before SQLite storage. Repeated failures are consolidated and successful recovery resolves the matching operation.
+      </p>
+      {operationalErrors.length === 0
+        ? <p className="muted">No operational errors have been recorded.</p>
+        : <div className="table-wrap"><table><thead><tr><th>Operation</th><th>Category</th><th>Severity</th><th>Count</th><th>Status</th><th>Last seen</th><th>Safe report</th></tr></thead><tbody>
+          {operationalErrors.map(item => <tr key={item.id}>
+            <td>{plainAction(item.operation)}</td>
+            <td>{plainAction(item.category)}</td>
+            <td><span className={`pill ${item.severity}`}>{item.severity}</span></td>
+            <td>{item.occurrenceCount}</td>
+            <td>{item.resolvedAt ? 'Resolved' : item.retryable ? 'Retryable' : 'Operator review'}</td>
+            <td>{formatDate(item.lastOccurredAt)}</td>
+            <td className="message-cell">{item.safeMessage}</td>
+          </tr>)}
+        </tbody></table></div>}
     </section>
   </>;
 }

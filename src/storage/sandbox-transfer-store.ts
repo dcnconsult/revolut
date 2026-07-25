@@ -2,6 +2,12 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { SandboxInternalTransferRecord } from '../services/sandbox-internal-transfer-service.js';
+import type {
+  OperationalErrorInput,
+  OperationalErrorPersistence,
+  OperationalErrorRecord,
+  OperationalErrorReport
+} from '../operations/operational-error-monitor.js';
 
 export interface SandboxAuditEvent {
   id: number;
@@ -23,7 +29,7 @@ export interface OperatorAuditEvent {
   createdAt: string;
 }
 
-export interface SandboxTransferStore {
+export interface SandboxTransferStore extends OperationalErrorPersistence {
   get(id: string): SandboxInternalTransferRecord | undefined;
   findByClientReference(clientReference: string): SandboxInternalTransferRecord | undefined;
   save(record: SandboxInternalTransferRecord, eventType: string, details?: Record<string, unknown>): void;
@@ -57,6 +63,22 @@ interface OperatorAuditRow {
   transfer_id: string | null;
   details_json: string;
   created_at: string;
+}
+
+interface OperationalErrorRow {
+  id: number;
+  fingerprint: string;
+  category: OperationalErrorRecord['category'];
+  severity: OperationalErrorRecord['severity'];
+  operation: string;
+  safe_message: string;
+  retryable: number;
+  http_status: number | null;
+  context_json: string;
+  occurrence_count: number;
+  first_occurred_at: string;
+  last_occurred_at: string;
+  resolved_at: string | null;
 }
 
 export class SQLiteSandboxTransferStore implements SandboxTransferStore {
@@ -103,6 +125,25 @@ export class SQLiteSandboxTransferStore implements SandboxTransferStore {
       );
       CREATE INDEX IF NOT EXISTS operator_audit_created_at
         ON operator_audit_events(created_at DESC);
+      CREATE TABLE IF NOT EXISTS operational_errors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fingerprint TEXT NOT NULL UNIQUE,
+        category TEXT NOT NULL,
+        severity TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        safe_message TEXT NOT NULL,
+        retryable INTEGER NOT NULL CHECK (retryable IN (0, 1)),
+        http_status INTEGER,
+        context_json TEXT NOT NULL CHECK (json_valid(context_json)),
+        occurrence_count INTEGER NOT NULL DEFAULT 1 CHECK (occurrence_count > 0),
+        first_occurred_at TEXT NOT NULL,
+        last_occurred_at TEXT NOT NULL,
+        resolved_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS operational_errors_last_occurred
+        ON operational_errors(last_occurred_at DESC);
+      CREATE INDEX IF NOT EXISTS operational_errors_unresolved
+        ON operational_errors(resolved_at, severity, last_occurred_at DESC);
     `);
   }
 
@@ -219,6 +260,99 @@ export class SQLiteSandboxTransferStore implements SandboxTransferStore {
       total: Number(totalRow.total),
       byState: Object.fromEntries(stateRows.map(row => [row.state, Number(row.count)])),
       ...(totalRow.latest ? { latestUpdatedAt: totalRow.latest } : {})
+    };
+  }
+
+  recordOperationalError(error: OperationalErrorInput) {
+    this.database.prepare(`
+      INSERT INTO operational_errors (
+        fingerprint, category, severity, operation, safe_message, retryable,
+        http_status, context_json, occurrence_count, first_occurred_at,
+        last_occurred_at, resolved_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, NULL)
+      ON CONFLICT(fingerprint) DO UPDATE SET
+        category = excluded.category,
+        severity = excluded.severity,
+        retryable = excluded.retryable,
+        http_status = excluded.http_status,
+        context_json = excluded.context_json,
+        occurrence_count = operational_errors.occurrence_count + 1,
+        last_occurred_at = excluded.last_occurred_at,
+        resolved_at = NULL
+    `).run(
+      error.fingerprint,
+      error.category,
+      error.severity,
+      error.operation,
+      error.safeMessage,
+      error.retryable ? 1 : 0,
+      error.httpStatus ?? null,
+      JSON.stringify(error.context),
+      error.occurredAt,
+      error.occurredAt
+    );
+  }
+
+  resolveOperationalErrors(operation: string, resolvedAt: string) {
+    this.database.prepare(`
+      UPDATE operational_errors SET resolved_at = ?
+      WHERE operation = ? AND resolved_at IS NULL
+    `).run(resolvedAt, operation);
+  }
+
+  listOperationalErrors(limit: number) {
+    const rows = this.database.prepare(`
+      SELECT id, fingerprint, category, severity, operation, safe_message,
+        retryable, http_status, context_json, occurrence_count,
+        first_occurred_at, last_occurred_at, resolved_at
+      FROM operational_errors ORDER BY last_occurred_at DESC LIMIT ?
+    `).all(limit) as unknown as OperationalErrorRow[];
+    return rows.map(row => ({
+      id: Number(row.id),
+      fingerprint: row.fingerprint,
+      category: row.category,
+      severity: row.severity,
+      operation: row.operation,
+      safeMessage: row.safe_message,
+      retryable: row.retryable === 1,
+      ...(row.http_status === null ? {} : { httpStatus: Number(row.http_status) }),
+      context: JSON.parse(row.context_json) as Record<string, string | number | boolean>,
+      occurrenceCount: Number(row.occurrence_count),
+      occurredAt: row.last_occurred_at,
+      firstOccurredAt: row.first_occurred_at,
+      lastOccurredAt: row.last_occurred_at,
+      ...(row.resolved_at ? { resolvedAt: row.resolved_at } : {})
+    }));
+  }
+
+  operationalErrorReport(): OperationalErrorReport {
+    const rows = this.database.prepare(`
+      SELECT category, severity, retryable, occurrence_count, last_occurred_at
+      FROM operational_errors WHERE resolved_at IS NULL
+    `).all() as unknown as Array<{
+      category: string;
+      severity: string;
+      retryable: number;
+      occurrence_count: number;
+      last_occurred_at: string;
+    }>;
+    const critical = rows.filter(row => row.severity === 'critical').length;
+    const warning = rows.filter(row => row.severity === 'warning').length;
+    const byCategory: Record<string, number> = {};
+    for (const row of rows) byCategory[row.category] = (byCategory[row.category] ?? 0) + 1;
+    const latestOccurredAt = rows
+      .map(row => row.last_occurred_at)
+      .sort((left, right) => right.localeCompare(left))[0];
+    return {
+      health: critical > 0 ? 'blocked' : warning > 0 ? 'degraded' : 'clear',
+      unresolved: rows.length,
+      critical,
+      warning,
+      retryable: rows.filter(row => row.retryable === 1).length,
+      totalOccurrences: rows.reduce((total, row) => total + Number(row.occurrence_count), 0),
+      byCategory,
+      ...(latestOccurredAt ? { latestOccurredAt } : {}),
+      generatedAt: new Date().toISOString()
     };
   }
 

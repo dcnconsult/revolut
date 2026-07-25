@@ -68,11 +68,12 @@ the browser console. Password entry is masked. It connects only to the API
 inside the running loopback-bound container and refuses to start if the
 container is not private.
 
-The read-only menu provides service, release, backup, transfer, and audit
-status. The admin menu additionally provides owned-account listing, transfer
-preparation, guarded submission, and status reconciliation. Submission still
-requires the admin password and the exact amount-specific phrase. Closing the
-terminal or choosing **Sign out and exit** ends the session.
+The read-only menu provides service, release, backup, transfer, audit, and
+consolidated operational-error status. The admin menu additionally provides
+owned-account listing, transfer preparation, guarded submission, and status
+reconciliation. Submission still requires the admin password and the exact
+amount-specific phrase. Closing the terminal or choosing **Sign out and exit**
+ends the session.
 
 ## If something fails
 

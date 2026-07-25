@@ -143,6 +143,12 @@ in [`docs/SANDBOX_OPERATOR_CONSOLE.md`](docs/SANDBOX_OPERATOR_CONSOLE.md).
 The implemented controls and items deliberately deferred until live-conversion
 planning are summarized in
 [`docs/SANDBOX_CLOSEOUT_STATUS.md`](docs/SANDBOX_CLOSEOUT_STATUS.md).
+The separate, gated path toward read-only Production connectivity, draft-only
+testing, and an eventual controlled live-money pilot is documented in
+[`docs/PRODUCTION_READINESS_GUIDE.md`](docs/PRODUCTION_READINESS_GUIDE.md).
+The consolidated SQLite error monitor and the gated email-alert and
+fail-closed transaction-queue roadmap are documented in
+[`docs/ERROR_MONITORING_AND_OUTAGE_ROADMAP.md`](docs/ERROR_MONITORING_AND_OUTAGE_ROADMAP.md).
 
 ## Important boundaries
 

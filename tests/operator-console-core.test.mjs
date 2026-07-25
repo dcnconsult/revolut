@@ -69,4 +69,15 @@ describe('text-mode operator console client', () => {
     })).toBe('SUBMIT 0.01 GBP');
     expect(formatMoney(1, 'GBP')).toContain('0.01');
   });
+
+  it('retrieves the consolidated operational report', async () => {
+    const fetchImplementation = vi.fn(async url => new Response(JSON.stringify(
+      url.endsWith('/error-report')
+        ? { health: 'clear', unresolved: 0 }
+        : []
+    ), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const client = new OperatorConsoleClient(fetchImplementation);
+    await expect(client.errorReport()).resolves.toMatchObject({ health: 'clear' });
+    await expect(client.operationalErrors()).resolves.toEqual([]);
+  });
 });

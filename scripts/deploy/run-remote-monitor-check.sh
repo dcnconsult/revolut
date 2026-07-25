@@ -41,15 +41,25 @@ phase2_output="$(bash "${current_release}/scripts/deploy/run-sandbox-phase2-chec
 
 monitor_step="database-monitoring"
 automation_token="$(< /etc/revolut/sandbox/automation-token)"
+accounts_response="$(curl --fail --silent --show-error --max-time 30 \
+  --header "authorization: Bearer ${automation_token}" \
+  http://127.0.0.1:3000/v1/sandbox/accounts)"
 summary_response="$(curl --fail --silent --show-error --max-time 15 \
   --header "authorization: Bearer ${automation_token}" \
   http://127.0.0.1:3000/v1/sandbox/monitoring/summary)"
 audit_response="$(curl --fail --silent --show-error --max-time 15 \
   --header "authorization: Bearer ${automation_token}" \
   'http://127.0.0.1:3000/v1/sandbox/monitoring/audit-events?limit=1')"
+error_report_response="$(curl --fail --silent --show-error --max-time 15 \
+  --header "authorization: Bearer ${automation_token}" \
+  http://127.0.0.1:3000/v1/sandbox/monitoring/error-report)"
+jq -e 'type == "array"' <<<"${accounts_response}" >/dev/null
 jq -e '.total | type == "number" and . >= 0' \
   <<<"${summary_response}" >/dev/null
 jq -e 'type == "array"' <<<"${audit_response}" >/dev/null
+jq -e '.health != "blocked" and (.unresolved | type == "number")' \
+  <<<"${error_report_response}" >/dev/null
+operations_health="$(jq -r '.health' <<<"${error_report_response}")"
 docker volume inspect revolut_revolut-data >/dev/null
 
 monitor_step="backup-freshness"
@@ -88,4 +98,4 @@ disk_percent="$(df --output=pcent "${app_root}" | tail -n 1 | tr -dc '0-9')"
 (( disk_percent < maximum_disk_percent ))
 
 trap - ERR
-echo "REMOTE_MONITOR_OK mode=sandbox health=ok authentication=ok database=ok backup=fresh cron=active disk=ok bind=loopback"
+echo "REMOTE_MONITOR_OK mode=sandbox health=ok authentication=ok database=ok operations=${operations_health} backup=fresh cron=active disk=ok bind=loopback"

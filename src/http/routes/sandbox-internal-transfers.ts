@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { env } from '../../config/env.js';
+import { redactOperationalMessage } from '../../operations/operational-error-monitor.js';
 import type { OperatorAuth } from '../../security/operator-auth.js';
 import type {
   SandboxInternalTransferRecord,
@@ -31,6 +32,7 @@ export async function sandboxInternalTransferRoutes(
       role: principal.role,
       release: env.RELEASE_SHA === 'local' ? 'local' : env.RELEASE_SHA.slice(0, 12),
       backup: backupStatus(),
+      operations: service.operationalErrorReport(),
       generatedAt: new Date().toISOString()
     };
   });
@@ -41,7 +43,7 @@ export async function sandboxInternalTransferRoutes(
     try {
       return reply.send(await service.listAccounts());
     } catch (error) {
-      return reply.internalServerError(error instanceof Error ? error.message : 'Unable to list Sandbox accounts.');
+      return reply.internalServerError(publicError(error, 'Unable to list Sandbox accounts.'));
     }
   });
 
@@ -60,7 +62,7 @@ export async function sandboxInternalTransferRoutes(
         return reply.code(201).send(record);
       } catch (error) {
         auth.audit(principal.username, principal.role, 'transfer_prepare', 'denied', undefined, {});
-        return reply.badRequest(error instanceof Error ? error.message : 'Sandbox transfer preparation failed.');
+        return reply.badRequest(publicError(error, 'Sandbox transfer preparation failed.'));
       }
     }
   );
@@ -91,7 +93,7 @@ export async function sandboxInternalTransferRoutes(
         return reply.send(submitted);
       } catch (error) {
         auth.audit(principal.username, principal.role, 'transfer_submit', 'failed', request.params.id);
-        return reply.badRequest(error instanceof Error ? error.message : 'Sandbox transfer submission failed.');
+        return reply.badRequest(publicError(error, 'Sandbox transfer submission failed.'));
       }
     }
   );
@@ -108,7 +110,7 @@ export async function sandboxInternalTransferRoutes(
         });
         return reply.send(record);
       } catch (error) {
-        return reply.badRequest(error instanceof Error ? error.message : 'Sandbox reconciliation failed.');
+        return reply.badRequest(publicError(error, 'Sandbox reconciliation failed.'));
       }
     }
   );
@@ -169,6 +171,20 @@ export async function sandboxInternalTransferRoutes(
         }))
       : events;
   });
+
+  app.get('/sandbox/monitoring/error-report', async (request, reply) => {
+    const principal = auth.require(request, reply, ['admin', 'viewer', 'automation']);
+    if (!principal) return;
+    return service.operationalErrorReport();
+  });
+
+  app.get<{ Querystring: { limit?: string } }>('/sandbox/monitoring/errors', async (request, reply) => {
+    const principal = auth.require(request, reply, ['admin', 'viewer', 'automation']);
+    if (!principal) return;
+    const limit = parseLimit(request.query.limit, reply);
+    if (!limit) return;
+    return service.listOperationalErrors(limit);
+  });
 }
 
 function parseLimit(value: string | undefined, reply: Parameters<OperatorAuth['require']>[1]) {
@@ -211,6 +227,10 @@ function validateTransferRequest(value: SandboxInternalTransferRequest) {
       value.clientReference.length > 80) {
     throw new Error('Client reference must contain 1 to 80 characters.');
   }
+}
+
+function publicError(error: unknown, fallback: string) {
+  return redactOperationalMessage(error instanceof Error ? error.message : fallback);
 }
 
 function backupStatus() {

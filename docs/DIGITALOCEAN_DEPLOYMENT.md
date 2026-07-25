@@ -128,7 +128,10 @@ bash /opt/revolut/releases/<FULL_COMMIT_SHA>/scripts/deploy/activate-release.sh 
 
 Do not add Revolut private keys, refresh tokens, populated `.env` files, bank
 XML, or GitHub deployment secrets to the repository. Live mode remains blocked
-by the controls documented in `IMPLEMENTATION_CHECKLIST.md`.
+by the controls documented in `IMPLEMENTATION_CHECKLIST.md`. Follow
+[`PRODUCTION_READINESS_GUIDE.md`](PRODUCTION_READINESS_GUIDE.md) for the
+separate, gated path from the current Sandbox baseline to read-only Production
+testing, draft-only testing, and eventually a controlled live-money pilot.
 
 ## READ-only Revolut Sandbox monitoring
 
