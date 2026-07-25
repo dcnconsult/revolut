@@ -9,8 +9,9 @@ const script = await readFile(
 describe('remote Sandbox smoke-test safety', () => {
   it('prepares but never submits a Sandbox transfer', () => {
     expect(script).toContain('/sandbox/internal-transfers/prepare');
-    expect(script).not.toContain('/submit');
     expect(script).toContain('PREPARE ONLY');
+    expect(script).toContain('automation-submit-denied');
+    expect(script).toContain('[[ "${submit_status}" == "403" ]]');
   });
 
   it('checks idempotency, persistence, monitoring, backups, and loopback binding', () => {

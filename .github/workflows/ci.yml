@@ -42,3 +42,9 @@ jobs:
 
       - name: Build application
         run: npm run build
+
+      - name: Install Chromium for operator-console tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Test operator console in Chromium
+        run: npm run test:e2e

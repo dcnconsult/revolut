@@ -5,12 +5,16 @@ services:
       REVOLUT_SANDBOX_CONFIG_PATH: /run/secrets/revolut-sandbox-config
       REVOLUT_SANDBOX_TOKENS_PATH: /run/secrets/revolut-sandbox-tokens
       REVOLUT_SANDBOX_PRIVATE_KEY_PATH: /run/secrets/revolut-sandbox-private-key
+      OPERATOR_AUTH_CONFIG_PATH: /run/secrets/operator-auth-config
       SANDBOX_DATABASE_PATH: /var/lib/revolut/sandbox-transfers.sqlite
+      SANDBOX_BACKUP_STATUS_PATH: /var/backups/revolut
     volumes:
       - ${REVOLUT_SANDBOX_CONFIG_FILE:-/etc/revolut/sandbox/config.json}:/run/secrets/revolut-sandbox-config:ro
       - ${REVOLUT_SANDBOX_TOKENS_FILE:-/etc/revolut/sandbox/tokens.json}:/run/secrets/revolut-sandbox-tokens:ro
       - ${REVOLUT_SANDBOX_PRIVATE_KEY_FILE:-/etc/revolut/sandbox/privatecert.pem}:/run/secrets/revolut-sandbox-private-key:ro
+      - ${OPERATOR_AUTH_CONFIG_FILE:-/etc/revolut/sandbox/operator-auth.json}:/run/secrets/operator-auth-config:ro
       - revolut-data:/var/lib/revolut
+      - /var/backups/revolut:/var/backups/revolut:ro
 
 volumes:
   revolut-data:

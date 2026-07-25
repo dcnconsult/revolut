@@ -43,7 +43,9 @@ jq -e '.status == "ok" and .mode == "sandbox"' \
   <<<"${health_response}" >/dev/null
 
 smoke_step="sandbox-accounts"
+automation_token="$(< /etc/revolut/sandbox/automation-token)"
 accounts_response="$(curl --fail --silent --show-error --max-time 30 \
+  --header "authorization: Bearer ${automation_token}" \
   http://127.0.0.1:3000/v1/sandbox/accounts)"
 account_pair="$(jq -c 'first(
   .[] as $source
@@ -73,10 +75,12 @@ request_body="$(jq -cn \
     clientReference: $client_reference
   }')"
 first_prepare="$(curl --fail --silent --show-error --max-time 30 \
+  --header "authorization: Bearer ${automation_token}" \
   --header 'content-type: application/json' \
   --data "${request_body}" \
   http://127.0.0.1:3000/v1/sandbox/internal-transfers/prepare)"
 second_prepare="$(curl --fail --silent --show-error --max-time 30 \
+  --header "authorization: Bearer ${automation_token}" \
   --header 'content-type: application/json' \
   --data "${request_body}" \
   http://127.0.0.1:3000/v1/sandbox/internal-transfers/prepare)"
@@ -99,6 +103,7 @@ for _attempt in {1..30}; do
   sleep 1
 done
 persisted_record="$(curl --fail --silent --show-error --max-time 15 \
+  --header "authorization: Bearer ${automation_token}" \
   "http://127.0.0.1:3000/v1/sandbox/internal-transfers/${record_id}")"
 jq -e --arg record_id "${record_id}" \
   '.id == $record_id and .state == "prepared" and (.providerTransactionId == null)' \
@@ -106,8 +111,10 @@ jq -e --arg record_id "${record_id}" \
 
 smoke_step="monitoring"
 transfers_response="$(curl --fail --silent --show-error --max-time 15 \
+  --header "authorization: Bearer ${automation_token}" \
   'http://127.0.0.1:3000/v1/sandbox/monitoring/transfers?limit=500')"
 audit_response="$(curl --fail --silent --show-error --max-time 15 \
+  --header "authorization: Bearer ${automation_token}" \
   'http://127.0.0.1:3000/v1/sandbox/monitoring/audit-events?limit=500')"
 jq -e --arg record_id "${record_id}" \
   'any(.[]; .id == $record_id and .state == "prepared")' \
@@ -115,6 +122,14 @@ jq -e --arg record_id "${record_id}" \
 jq -e --arg record_id "${record_id}" \
   'any(.[]; .transferId == $record_id and .eventType == "prepared" and .state == "prepared")' \
   <<<"${audit_response}" >/dev/null
+
+smoke_step="automation-submit-denied"
+submit_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 15 \
+  --header "authorization: Bearer ${automation_token}" \
+  --header 'content-type: application/json' \
+  --data '{}' \
+  "http://127.0.0.1:3000/v1/sandbox/internal-transfers/${record_id}/submit")"
+[[ "${submit_status}" == "403" ]]
 
 smoke_step="backup"
 bash "${current_release}/scripts/deploy/backup-sandbox-database.sh" >/dev/null

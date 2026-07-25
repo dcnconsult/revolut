@@ -26,6 +26,8 @@ export interface SandboxInternalTransferRecord {
 const providerStates = new Set(['pending', 'completed', 'failed', 'reverted', 'declined']);
 
 export class SandboxInternalTransferService {
+  private readonly inFlightSubmissions = new Map<string, Promise<SandboxInternalTransferRecord>>();
+
   constructor(
     private readonly client: SandboxInternalTransferClient,
     private readonly maximumAmountMinor: number,
@@ -82,6 +84,18 @@ export class SandboxInternalTransferService {
   }
 
   async submit(id: string) {
+    const existingSubmission = this.inFlightSubmissions.get(id);
+    if (existingSubmission) return structuredClone(await existingSubmission);
+    const submission = this.submitOnce(id);
+    this.inFlightSubmissions.set(id, submission);
+    try {
+      return structuredClone(await submission);
+    } finally {
+      this.inFlightSubmissions.delete(id);
+    }
+  }
+
+  private async submitOnce(id: string) {
     const record = this.mustGet(id);
     if (record.providerTransactionId) return structuredClone(record);
     if (record.state !== 'prepared') throw new Error(`Sandbox transfer cannot be submitted from ${record.state}.`);
@@ -111,7 +125,7 @@ export class SandboxInternalTransferService {
       updatedAt: new Date().toISOString()
     };
     this.store.save(updated, 'submitted', { providerTransactionIdPresent: true });
-    return structuredClone(updated);
+    return updated;
   }
 
   async reconcile(id: string) {
@@ -139,8 +153,16 @@ export class SandboxInternalTransferService {
     return this.store.listAuditEvents(limit);
   }
 
+  listOperatorEvents(limit: number) {
+    return this.store.listOperatorEvents(limit);
+  }
+
   monitoringSummary() {
     return this.store.summary();
+  }
+
+  maximumTransferAmountMinor() {
+    return this.maximumAmountMinor;
   }
 
   private mustGet(id: string) {

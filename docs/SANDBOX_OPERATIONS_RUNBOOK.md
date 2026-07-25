@@ -69,11 +69,12 @@ ssh -i C:\Users\novot\.ssh\revolut_deploy -L 3300:127.0.0.1:3000 deploy@178.128.
 Then open:
 
 ```text
-http://127.0.0.1:3300/v1/sandbox/monitoring
+http://127.0.0.1:3300/operator/
 ```
 
 The application is intentionally unavailable on the Droplet's public port
-3000.
+3000. Sign in with the privately supplied admin or read-only account. See
+[`SANDBOX_OPERATOR_CONSOLE.md`](SANDBOX_OPERATOR_CONSOLE.md).
 
 ## Transfer states
 

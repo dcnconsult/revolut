@@ -12,12 +12,25 @@ export interface SandboxAuditEvent {
   createdAt: string;
 }
 
+export interface OperatorAuditEvent {
+  id: number;
+  actor: string;
+  role: string;
+  action: string;
+  outcome: string;
+  transferId?: string;
+  details: Record<string, unknown>;
+  createdAt: string;
+}
+
 export interface SandboxTransferStore {
   get(id: string): SandboxInternalTransferRecord | undefined;
   findByClientReference(clientReference: string): SandboxInternalTransferRecord | undefined;
   save(record: SandboxInternalTransferRecord, eventType: string, details?: Record<string, unknown>): void;
   list(limit: number): SandboxInternalTransferRecord[];
   listAuditEvents(limit: number): SandboxAuditEvent[];
+  recordOperatorEvent(event: Omit<OperatorAuditEvent, 'id' | 'createdAt'>): void;
+  listOperatorEvents(limit: number): OperatorAuditEvent[];
   summary(): { total: number; byState: Record<string, number>; latestUpdatedAt?: string };
   close(): void;
 }
@@ -31,6 +44,17 @@ interface AuditRow {
   transfer_id: string;
   event_type: string;
   state: string;
+  details_json: string;
+  created_at: string;
+}
+
+interface OperatorAuditRow {
+  id: number;
+  actor: string;
+  role: string;
+  action: string;
+  outcome: string;
+  transfer_id: string | null;
   details_json: string;
   created_at: string;
 }
@@ -67,6 +91,18 @@ export class SQLiteSandboxTransferStore implements SandboxTransferStore {
       );
       CREATE INDEX IF NOT EXISTS sandbox_audit_created_at
         ON sandbox_audit_events(created_at DESC);
+      CREATE TABLE IF NOT EXISTS operator_audit_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        actor TEXT NOT NULL,
+        role TEXT NOT NULL,
+        action TEXT NOT NULL,
+        outcome TEXT NOT NULL,
+        transfer_id TEXT,
+        details_json TEXT NOT NULL CHECK (json_valid(details_json)),
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS operator_audit_created_at
+        ON operator_audit_events(created_at DESC);
     `);
   }
 
@@ -134,6 +170,39 @@ export class SQLiteSandboxTransferStore implements SandboxTransferStore {
       transferId: row.transfer_id,
       eventType: row.event_type,
       state: row.state,
+      details: JSON.parse(row.details_json) as Record<string, unknown>,
+      createdAt: row.created_at
+    }));
+  }
+
+  recordOperatorEvent(event: Omit<OperatorAuditEvent, 'id' | 'createdAt'>) {
+    this.database.prepare(`
+      INSERT INTO operator_audit_events (
+        actor, role, action, outcome, transfer_id, details_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      event.actor,
+      event.role,
+      event.action,
+      event.outcome,
+      event.transferId ?? null,
+      JSON.stringify(event.details),
+      new Date().toISOString()
+    );
+  }
+
+  listOperatorEvents(limit: number) {
+    const rows = this.database.prepare(`
+      SELECT id, actor, role, action, outcome, transfer_id, details_json, created_at
+      FROM operator_audit_events ORDER BY id DESC LIMIT ?
+    `).all(limit) as unknown as OperatorAuditRow[];
+    return rows.map(row => ({
+      id: Number(row.id),
+      actor: row.actor,
+      role: row.role,
+      action: row.action,
+      outcome: row.outcome,
+      ...(row.transfer_id ? { transferId: row.transfer_id } : {}),
       details: JSON.parse(row.details_json) as Record<string, unknown>,
       createdAt: row.created_at
     }));

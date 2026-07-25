@@ -1,0 +1,258 @@
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { api, money, type Account, type Session, type Summary, type Transfer } from './api';
+
+interface Status {
+  mode: 'sandbox';
+  liveData: false;
+  maximumAmountMinor: number;
+  role: string;
+  release?: string;
+  backup?: { state: 'fresh' | 'stale' | 'missing' | 'unavailable'; latestAt?: string };
+  generatedAt: string;
+}
+
+interface OperatorEvent {
+  id?: number;
+  actor?: string;
+  action: string;
+  outcome: string;
+  transferId?: string;
+  transferRef?: string;
+  createdAt: string;
+}
+
+export function App() {
+  const [session, setSession] = useState<Session>();
+  const [checking, setChecking] = useState(true);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    api<Session>('/v1/operator/session')
+      .then(setSession)
+      .catch(() => undefined)
+      .finally(() => setChecking(false));
+  }, []);
+
+  if (checking) return <Shell><div className="center-card">Checking secure session…</div></Shell>;
+  if (!session) return <Shell><Login onLogin={setSession} /></Shell>;
+  return (
+    <Shell>
+      <header className="topbar">
+        <div>
+          <p className="eyebrow">Operator console</p>
+          <h1>Sandbox control room</h1>
+        </div>
+        <div className="user-panel">
+          <span><strong>{session.username}</strong><small>{session.role === 'admin' ? 'Administrator' : 'Read only'}</small></span>
+          <button className="button ghost" onClick={async () => {
+            await api('/v1/operator/session', { method: 'DELETE' }, session.csrfToken);
+            setSession(undefined);
+          }}>Sign out</button>
+        </div>
+      </header>
+      {message && <div className="notice" role="status">{message}<button onClick={() => setMessage('')}>×</button></div>}
+      <Dashboard session={session} notify={setMessage} />
+    </Shell>
+  );
+}
+
+function Shell({ children }: { children: React.ReactNode }) {
+  return <><div className="sandbox-banner" role="region" aria-label="Environment warning">REVOLUT SANDBOX · NO LIVE DATA</div><main>{children}</main></>;
+}
+
+function Login({ onLogin }: { onLogin: (session: Session) => void }) {
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    const data = new FormData(event.currentTarget);
+    try {
+      onLogin(await api<Session>('/v1/operator/session', {
+        method: 'POST',
+        body: JSON.stringify({ username: data.get('username'), password: data.get('password') })
+      }));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Sign-in failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return <section className="login-card">
+    <p className="eyebrow">Private access</p>
+    <h1>Sandbox operator sign in</h1>
+    <p>Use the account supplied by your administrator. This console cannot access live Revolut data.</p>
+    <form onSubmit={submit}>
+      <label>Username<input name="username" autoComplete="username" required /></label>
+      <label>Password<input name="password" type="password" autoComplete="current-password" required /></label>
+      {error && <p className="error" role="alert">{error}</p>}
+      <button className="button primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in securely'}</button>
+    </form>
+  </section>;
+}
+
+function Dashboard({ session, notify }: { session: Session; notify: (value: string) => void }) {
+  const [summary, setSummary] = useState<Summary>();
+  const [status, setStatus] = useState<Status>();
+  const [transfers, setTransfers] = useState<Transfer[]>([]);
+  const [events, setEvents] = useState<OperatorEvent[]>([]);
+  const [error, setError] = useState('');
+  const refresh = useCallback(async () => {
+    try {
+      const [nextSummary, nextStatus, nextTransfers, nextEvents] = await Promise.all([
+        api<Summary>('/v1/sandbox/monitoring/summary'),
+        api<Status>('/v1/sandbox/operator-status'),
+        api<Transfer[]>('/v1/sandbox/monitoring/transfers?limit=25'),
+        api<OperatorEvent[]>('/v1/sandbox/monitoring/operator-events?limit=25')
+      ]);
+      setSummary(nextSummary); setStatus(nextStatus); setTransfers(nextTransfers); setEvents(nextEvents); setError('');
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Dashboard could not be refreshed.');
+    }
+  }, []);
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  return <>
+    <section className="status-grid" aria-label="Sandbox status">
+      <StatusCard label="Environment" value="Sandbox" detail="Live mode is disabled" tone="green" />
+      <StatusCard label="Stored tests" value={String(summary?.total ?? '—')} detail={summary?.latestUpdatedAt ? `Updated ${formatDate(summary.latestUpdatedAt)}` : 'No tests yet'} />
+      <StatusCard label="Transfer ceiling" value={status ? money(status.maximumAmountMinor, 'GBP').replace('GBP', '').trim() : '—'} detail="Applied per Sandbox transfer" />
+      <StatusCard label="Backup" value={status?.backup ? title(status.backup.state) : '—'} detail={status?.backup?.latestAt ? `Saved ${formatDate(status.backup.latestAt)}` : 'No recent backup timestamp'} tone={status?.backup?.state === 'fresh' ? 'green' : ''} />
+      <StatusCard label="Deployment" value={status?.release ?? '—'} detail="Active release identifier" />
+      <StatusCard label="Access" value={session.role === 'admin' ? 'Admin' : 'Read only'} detail="Enforced by the server" />
+    </section>
+    {error && <p className="error" role="alert">{error}</p>}
+    {session.role === 'admin' && status && <TransferWizard session={session} maximum={status.maximumAmountMinor} onDone={async value => { notify(value); await refresh(); }} />}
+    <section className="two-column">
+      <article className="panel">
+        <div className="panel-heading"><div><p className="eyebrow">Transactions</p><h2>Recent Sandbox activity</h2></div><button className="button ghost" onClick={() => void refresh()}>Refresh</button></div>
+        <TransferTable
+          transfers={transfers}
+          viewer={session.role === 'viewer'}
+          onReconcile={session.role === 'admin' ? async id => {
+            await api(`/v1/sandbox/internal-transfers/${id}/reconcile`, { method: 'POST' }, session.csrfToken);
+            notify('Sandbox transfer status refreshed.');
+            await refresh();
+          } : undefined}
+        />
+      </article>
+      <article className="panel">
+        <p className="eyebrow">Audit trail</p><h2>Recent operator actions</h2>
+        <div className="timeline">{events.length === 0 ? <p className="muted">No operator activity recorded.</p> : events.map((event, index) =>
+          <div className="timeline-row" key={event.id ?? `${event.createdAt}-${index}`}>
+            <span className={`dot ${event.outcome === 'success' ? 'success' : ''}`} />
+            <div><strong>{plainAction(event.action)}</strong><small>{event.outcome} · {formatDate(event.createdAt)}</small></div>
+          </div>)}</div>
+      </article>
+    </section>
+  </>;
+}
+
+function StatusCard({ label, value, detail, tone = '' }: { label: string; value: string; detail: string; tone?: string }) {
+  return <article className="status-card"><span className={`status-light ${tone}`} /><p>{label}</p><strong>{value}</strong><small>{detail}</small></article>;
+}
+
+function TransferWizard({ session, maximum, onDone }: { session: Session; maximum: number; onDone: (message: string) => Promise<void> }) {
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [prepared, setPrepared] = useState<Transfer>();
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api<Account[]>('/v1/sandbox/accounts').then(setAccounts).catch(error => setError(error.message)); }, []);
+  const pairs = useMemo(() => accounts.flatMap(source => accounts
+    .filter(target => target.id !== source.id && target.currency === source.currency && target.state === 'active')
+    .map(target => ({ source, target }))), [accounts]);
+
+  async function prepare(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError('');
+    const data = new FormData(event.currentTarget);
+    const pair = pairs[Number(data.get('pair'))];
+    if (!pair) { setError('Choose an eligible account pair.'); setBusy(false); return; }
+    const amountMinor = Math.round(Number(data.get('amount')) * 100);
+    try {
+      setPrepared(await api<Transfer>('/v1/sandbox/internal-transfers/prepare', {
+        method: 'POST',
+        body: JSON.stringify({
+          sourceAccountId: pair.source.id,
+          targetAccountId: pair.target.id,
+          amountMinor,
+          currency: pair.source.currency,
+          reference: 'SANDBOX OPERATOR CONSOLE TEST',
+          clientReference: crypto.randomUUID()
+        })
+      }, session.csrfToken));
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Preparation failed.'); }
+    finally { setBusy(false); }
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!prepared?.id || !prepared.request) return;
+    setBusy(true); setError('');
+    const data = new FormData(event.currentTarget);
+    try {
+      const result = await api<Transfer>(`/v1/sandbox/internal-transfers/${prepared.id}/submit`, {
+        method: 'POST',
+        body: JSON.stringify({ password: data.get('password'), confirmation: data.get('confirmation') })
+      }, session.csrfToken);
+      setPrepared(undefined);
+      await onDone(`Sandbox transfer submitted. Current state: ${result.state}.`);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Submission failed.'); }
+    finally { setBusy(false); }
+  }
+
+  if (prepared?.request) {
+    const phrase = `SUBMIT ${(prepared.request.amountMinor / 100).toFixed(2)} ${prepared.request.currency}`;
+    return <section className="panel action-panel">
+      <p className="eyebrow danger-text">Final Sandbox confirmation</p><h2>Review before submitting</h2>
+      <div className="review"><span>Amount<strong>{money(prepared.request.amountMinor, prepared.request.currency)}</strong></span><span>Environment<strong>Sandbox only</strong></span><span>Status<strong>Prepared — not sent</strong></span></div>
+      <form onSubmit={submit}>
+        <label>Re-enter your admin password<input name="password" type="password" autoComplete="current-password" required /></label>
+        <label>Type <code>{phrase}</code><input name="confirmation" autoComplete="off" required /></label>
+        {error && <p className="error" role="alert">{error}</p>}
+        <div className="actions"><button type="button" className="button ghost" onClick={() => setPrepared(undefined)}>Cancel</button><button className="button danger" disabled={busy}>{busy ? 'Submitting…' : 'Submit Sandbox transfer'}</button></div>
+      </form>
+    </section>;
+  }
+  return <section className="panel action-panel">
+    <p className="eyebrow">Admin action</p><h2>Run a controlled Sandbox transfer</h2>
+    <p>Preparation validates the accounts and amount without moving test funds. You will review a separate confirmation screen before submission.</p>
+    <form className="prepare-form" onSubmit={prepare}>
+      <label>Eligible account pair<select name="pair" required defaultValue=""><option value="" disabled>Select source and destination</option>{pairs.map((pair, index) =>
+        <option key={`${pair.source.id}-${pair.target.id}`} value={index}>{pair.source.name} → {pair.target.name} · {pair.source.currency}</option>)}</select></label>
+      <label>Sandbox amount<input name="amount" type="number" min="0.01" max={(maximum / 100).toFixed(2)} step="0.01" defaultValue="0.01" required /></label>
+      <button className="button primary" disabled={busy || pairs.length === 0}>{busy ? 'Validating…' : 'Prepare test'}</button>
+    </form>
+    {error && <p className="error" role="alert">{error}</p>}
+  </section>;
+}
+
+function TransferTable({
+  transfers,
+  viewer,
+  onReconcile
+}: {
+  transfers: Transfer[];
+  viewer: boolean;
+  onReconcile?: (id: string) => Promise<void>;
+}) {
+  if (transfers.length === 0) return <p className="muted">No Sandbox transfers have been recorded.</p>;
+  return <div className="table-wrap"><table><thead><tr><th>Reference</th><th>Amount</th><th>Status</th><th>Updated</th>{onReconcile && <th>Action</th>}</tr></thead><tbody>{transfers.map((transfer, index) => {
+    const amount = transfer.request?.amountMinor ?? transfer.amountMinor ?? 0;
+    const currency = transfer.request?.currency ?? transfer.currency ?? 'GBP';
+    const canReconcile = transfer.id && ['submitted', 'pending'].includes(transfer.state);
+    return <tr key={transfer.id ?? transfer.transferRef ?? index}><td><code>{viewer ? transfer.transferRef : transfer.id?.slice(0, 8)}</code></td><td>{money(amount, currency)}</td><td><span className={`pill ${transfer.state}`}>{transfer.state}</span></td><td>{formatDate(transfer.updatedAt)}</td>{onReconcile && <td>{canReconcile ? <button className="button ghost" onClick={() => void onReconcile(transfer.id!)}>Refresh status</button> : '—'}</td>}</tr>;
+  })}</tbody></table></div>;
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+}
+
+function plainAction(value: string) {
+  return value.replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
+function title(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}

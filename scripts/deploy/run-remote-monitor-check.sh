@@ -40,9 +40,12 @@ phase2_output="$(bash "${current_release}/scripts/deploy/run-sandbox-phase2-chec
 [[ "${phase2_output}" == PHASE2_SANDBOX_OK* ]]
 
 monitor_step="database-monitoring"
+automation_token="$(< /etc/revolut/sandbox/automation-token)"
 summary_response="$(curl --fail --silent --show-error --max-time 15 \
+  --header "authorization: Bearer ${automation_token}" \
   http://127.0.0.1:3000/v1/sandbox/monitoring/summary)"
 audit_response="$(curl --fail --silent --show-error --max-time 15 \
+  --header "authorization: Bearer ${automation_token}" \
   'http://127.0.0.1:3000/v1/sandbox/monitoring/audit-events?limit=1')"
 jq -e '.total | type == "number" and . >= 0' \
   <<<"${summary_response}" >/dev/null
@@ -72,7 +75,9 @@ monitor_step="credential-permissions"
 for credential_file in \
   /etc/revolut/sandbox/config.json \
   /etc/revolut/sandbox/tokens.json \
-  /etc/revolut/sandbox/privatecert.pem; do
+  /etc/revolut/sandbox/privatecert.pem \
+  /etc/revolut/sandbox/operator-auth.json \
+  /etc/revolut/sandbox/automation-token; do
   credential_mode="$(stat -c '%a' "${credential_file}")"
   [[ "${credential_mode}" =~ ^(400|440|600|640)$ ]]
 done
