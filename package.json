@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.frontend.json",
     "check": "npm run lint && npm run typecheck && npm test",
     "operator:credentials": "node scripts/operator/create-credentials.mjs",
+    "operator:console": "node scripts/operator/console.mjs",
     "test:e2e": "playwright test",
     "test:iso20022": "vitest run --config vitest.config.ts tests/iso20022-parser.test.ts tests/iso20022-routes.test.ts",
     "sandbox:setup": "node scripts/sandbox/setup.mjs",

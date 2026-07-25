@@ -28,6 +28,8 @@ COPY --chown=node:node scripts/sandbox/account-transfer-core.mjs ./scripts/sandb
 COPY --chown=node:node scripts/sandbox/droplet-transfer.mjs ./scripts/sandbox/droplet-transfer.mjs
 COPY --chown=node:node scripts/backup-sqlite.mjs ./scripts/backup-sqlite.mjs
 COPY --chown=node:node scripts/operator/create-credentials.mjs ./scripts/operator/create-credentials.mjs
+COPY --chown=node:node scripts/operator/console-core.mjs ./scripts/operator/console-core.mjs
+COPY --chown=node:node scripts/operator/console.mjs ./scripts/operator/console.mjs
 RUN install -d -m 0700 -o node -g node /var/lib/revolut
 
 USER node

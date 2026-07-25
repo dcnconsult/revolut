@@ -76,6 +76,13 @@ The application is intentionally unavailable on the Droplet's public port
 3000. Sign in with the privately supplied admin or read-only account. See
 [`SANDBOX_OPERATOR_CONSOLE.md`](SANDBOX_OPERATOR_CONSOLE.md).
 
+If the browser or tunnel is unavailable, use the authenticated text fallback
+from an interactive Droplet console:
+
+```bash
+bash /opt/revolut/current/scripts/deploy/run-operator-console.sh
+```
+
 ## Transfer states
 
 | State | Meaning | Routine action |
