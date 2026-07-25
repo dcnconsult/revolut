@@ -1,5 +1,5 @@
 import { generateKeyPairSync, randomBytes, sign, verify } from 'node:crypto';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -10,6 +10,7 @@ import { BrokeredFundingCaseService } from '../src/cases/case-service.js';
 import { SQLiteCaseStore } from '../src/cases/case-store.js';
 import { EncryptedEvidenceStore } from '../src/cases/evidence-store.js';
 import { CleanTestScanner, type MalwareScanner } from '../src/cases/malware-scanner.js';
+import { legacyAssetDeclarationPackage } from './fixtures/legacy-package.js';
 
 const limits = {
   maximumZipBytes: 25 * 1024 * 1024,
@@ -33,7 +34,7 @@ describe('brokered funding case workflow', () => {
       {}
     );
     try {
-      const zip = await readFile(join(process.cwd(), '..', 'inbox', 'TXN001', 'TXN_001.zip'));
+      const zip = await legacyAssetDeclarationPackage();
       const submitted = service.submit(zip, 'TXN_001');
       const record = await service.waitForProcessing(submitted.case.id);
       expect(record.caseStatus).toBe('INTAKE_HOLD');
@@ -170,7 +171,7 @@ describe('brokered funding case workflow', () => {
       {}
     );
     try {
-      const zip = await readFile(join(process.cwd(), '..', 'inbox', 'TXN001', 'TXN_001.zip'));
+      const zip = await legacyAssetDeclarationPackage();
       const submitted = service.submit(zip, 'scanner-outage');
       const record = await service.waitForProcessing(submitted.case.id);
       expect(record.caseStatus).toBe('QUARANTINED');

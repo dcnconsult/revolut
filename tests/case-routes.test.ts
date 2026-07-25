@@ -1,9 +1,9 @@
-import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SandboxInternalTransferClient } from '../src/adapters/revolut-sandbox-client.js';
 import { buildApp } from '../src/server.js';
+import { legacyAssetDeclarationPackage } from './fixtures/legacy-package.js';
 
 const provider: SandboxInternalTransferClient = {
   getAccounts: vi.fn(async () => []),
@@ -33,7 +33,7 @@ describe('brokered funding case routes', () => {
       'x-csrf-token': login.json().csrfToken as string,
       origin: 'http://localhost:80'
     };
-    const zip = await readFile('../inbox/TXN001/TXN_001.zip');
+    const zip = await legacyAssetDeclarationPackage();
     const multipart = multipartPayload(zip);
     const submitted = await app.inject({
       method: 'POST',
@@ -94,7 +94,7 @@ describe('brokered funding case routes', () => {
     });
     const setCookie = viewerLogin.headers['set-cookie'];
     const viewerCookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(';')[0] ?? '';
-    const zip = await readFile('../inbox/TXN001/TXN_001.zip');
+    const zip = await legacyAssetDeclarationPackage();
     const multipart = multipartPayload(zip);
     expect((await app.inject({
       method: 'POST',
