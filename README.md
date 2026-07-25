@@ -138,6 +138,8 @@ transfers, see [`docs/SANDBOX_LIVE_MODE.md`](docs/SANDBOX_LIVE_MODE.md).
 For routine checks, failure response, monitoring access, backup retention, and
 non-technical operating instructions, see
 [`docs/SANDBOX_OPERATIONS_RUNBOOK.md`](docs/SANDBOX_OPERATIONS_RUNBOOK.md).
+The private role-based console for one admin and one read-only user is covered
+in [`docs/SANDBOX_OPERATOR_CONSOLE.md`](docs/SANDBOX_OPERATOR_CONSOLE.md).
 The implemented controls and items deliberately deferred until live-conversion
 planning are summarized in
 [`docs/SANDBOX_CLOSEOUT_STATUS.md`](docs/SANDBOX_CLOSEOUT_STATUS.md).

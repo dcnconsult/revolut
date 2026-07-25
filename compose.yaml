@@ -12,6 +12,7 @@ services:
     environment:
       NODE_ENV: production
       REVOLUT_MODE: mock
+      RELEASE_SHA: ${IMAGE_TAG:-local}
     ports:
       - "127.0.0.1:3000:3000"
     read_only: true

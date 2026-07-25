@@ -15,13 +15,15 @@ make the scaffold suitable for live-money submission.
   Production mode.
 - GitHub Actions secrets contain SSH connection material; Git does not.
 
-Until authentication and a TLS reverse proxy are designed, reach the API with
-an SSH tunnel:
+The Sandbox API and operator console require local application authentication
+and remain reachable only through an SSH tunnel:
 
 ```bash
 ssh -L 3000:127.0.0.1:3000 deploy@178.128.36.90
 curl http://127.0.0.1:3000/health
 ```
+
+Open `http://127.0.0.1:3000/operator/` after the tunnel is connected.
 
 ## One-time Droplet bootstrap
 
@@ -83,15 +85,16 @@ Merging to `master` or manually dispatching the workflow:
 3. uploads files to an immutable commit-SHA release directory;
 4. builds the image on the Droplet;
 5. starts it and requires `/health` to report the configured mode;
-6. in Sandbox mode, runs a prepared-only remote smoke test covering
+6. in Sandbox mode, runs an authenticated prepared-only remote smoke test covering
    idempotency, restart persistence, monitoring, backup verification, and
    loopback-only binding; and
 7. updates `/opt/revolut/current` only when those checks pass.
 
 If candidate startup, health, backup scheduling, or the Sandbox smoke test
 fails, the activation script attempts to reactivate the previous immutable
-release automatically. The smoke test never calls the transfer submission
-endpoint and never prints account identifiers, balances, or credentials.
+release automatically. The smoke test calls the submission route only to prove
+its machine credential receives `403 Forbidden`; it never submits funds or
+prints account identifiers, balances, or credentials.
 
 Run the same safe smoke test manually with the **Run Safe Remote Sandbox Smoke
 Test** GitHub Actions workflow or from the Droplet:
@@ -146,11 +149,24 @@ The Droplet stores these root-managed files:
 /etc/revolut/sandbox/config.json
 /etc/revolut/sandbox/tokens.json
 /etc/revolut/sandbox/privatecert.pem
+/etc/revolut/sandbox/operator-auth.json
+/etc/revolut/sandbox/automation-token
 ```
 
-The three files are mounted read-only into the probe container. Their contents
+The API receives the hashed operator configuration read-only. The raw
+automation token remains on the host for scheduled checks. Their contents
 do not appear in Docker environment inspection. None belongs in Git, a release
 directory, a Docker image, or a GitHub secret.
+
+Provision the two human accounts and automation token once, as root, before
+activating the first console-enabled release:
+
+```bash
+bash /opt/revolut/current/scripts/deploy/provision-operator-access.sh
+```
+
+Store the displayed admin and viewer passwords immediately. The generator
+stores only password hashes and refuses to overwrite existing access.
 
 The committed check reads the saved configuration and refuses to run unless
 the API URL is exactly:

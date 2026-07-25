@@ -5,8 +5,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --include=dev
 
-COPY tsconfig.json ./
+COPY tsconfig.json tsconfig.frontend.json vite.config.ts ./
 COPY src ./src
+COPY frontend ./frontend
 RUN npm run build
 
 FROM node:22-bookworm-slim AS production
@@ -26,6 +27,7 @@ COPY --chown=node:node scripts/sandbox/droplet-accounts.mjs ./scripts/sandbox/dr
 COPY --chown=node:node scripts/sandbox/account-transfer-core.mjs ./scripts/sandbox/account-transfer-core.mjs
 COPY --chown=node:node scripts/sandbox/droplet-transfer.mjs ./scripts/sandbox/droplet-transfer.mjs
 COPY --chown=node:node scripts/backup-sqlite.mjs ./scripts/backup-sqlite.mjs
+COPY --chown=node:node scripts/operator/create-credentials.mjs ./scripts/operator/create-credentials.mjs
 RUN install -d -m 0700 -o node -g node /var/lib/revolut
 
 USER node

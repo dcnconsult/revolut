@@ -5,6 +5,8 @@ dist/
 *.cer
 *.key
 coverage/
+test-results/
+playwright-report/
 .DS_Store
 revolut-v0.3-update/
 .secrets/

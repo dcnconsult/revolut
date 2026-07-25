@@ -1,6 +1,9 @@
 import Fastify from 'fastify';
 import multipart from '@fastify/multipart';
 import sensible from '@fastify/sensible';
+import staticFiles from '@fastify/static';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { MockBankingProvider } from './adapters/mock-provider.js';
 import {
   RevolutSandboxClient,
@@ -10,17 +13,25 @@ import { env } from './config/env.js';
 import { iso20022ImportRoutes } from './http/routes/iso20022-imports.js';
 import { paymentRoutes } from './http/routes/payments.js';
 import { sandboxInternalTransferRoutes } from './http/routes/sandbox-internal-transfers.js';
+import { operatorRoutes } from './http/routes/operator.js';
 import { Iso20022ParserService } from './iso20022/parser.js';
 import { Iso20022ImportService } from './services/iso20022-import-service.js';
 import { PaymentOrchestrator } from './services/payment-orchestrator.js';
 import { SandboxInternalTransferService } from './services/sandbox-internal-transfer-service.js';
 import { InMemoryPaymentStore } from './storage/payment-store.js';
 import { SQLiteSandboxTransferStore } from './storage/sandbox-transfer-store.js';
+import {
+  createTestCredentials,
+  loadOperatorCredentials,
+  OperatorAuth,
+  type OperatorCredentials
+} from './security/operator-auth.js';
 
 interface BuildAppOptions {
   mode?: typeof env.REVOLUT_MODE;
   sandboxClient?: SandboxInternalTransferClient;
   sandboxDatabasePath?: string;
+  operatorCredentials?: OperatorCredentials;
 }
 
 export function buildApp(options: BuildAppOptions = {}) {
@@ -79,10 +90,26 @@ export function buildApp(options: BuildAppOptions = {}) {
       env.SANDBOX_INTERNAL_TRANSFER_MAX_MINOR,
       store
     );
+    const credentials = options.operatorCredentials ??
+      (env.NODE_ENV === 'test'
+        ? createTestCredentials()
+        : loadOperatorCredentials(env.OPERATOR_AUTH_CONFIG_PATH));
+    const auth = new OperatorAuth(credentials, store, env.OPERATOR_COOKIE_SECURE);
     app.addHook('onClose', async () => store.close());
     app.register(async instance => {
-      await sandboxInternalTransferRoutes(instance, service);
+      await operatorRoutes(instance, auth);
+      await sandboxInternalTransferRoutes(instance, service, auth);
     }, { prefix: '/v1' });
+
+    const frontendRoot = join(process.cwd(), 'dist', 'frontend');
+    if (existsSync(frontendRoot)) {
+      app.register(staticFiles, {
+        root: frontendRoot,
+        prefix: '/operator/',
+        decorateReply: false
+      });
+      app.get('/operator', async (_request, reply) => reply.redirect('/operator/'));
+    }
   }
   return app;
 }

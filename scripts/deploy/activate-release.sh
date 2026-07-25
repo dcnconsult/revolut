@@ -37,7 +37,9 @@ if [[ "${revolut_mode}" == "sandbox" ]]; then
   for credential_file in \
     /etc/revolut/sandbox/config.json \
     /etc/revolut/sandbox/tokens.json \
-    /etc/revolut/sandbox/privatecert.pem; do
+    /etc/revolut/sandbox/privatecert.pem \
+    /etc/revolut/sandbox/operator-auth.json \
+    /etc/revolut/sandbox/automation-token; do
     if [[ ! -r "${credential_file}" ]]; then
       echo "Sandbox credential is missing or unreadable: ${credential_file}" >&2
       exit 1
@@ -46,6 +48,7 @@ if [[ "${revolut_mode}" == "sandbox" ]]; then
   export REVOLUT_SANDBOX_CONFIG_FILE="/etc/revolut/sandbox/config.json"
   export REVOLUT_SANDBOX_TOKENS_FILE="/etc/revolut/sandbox/tokens.json"
   export REVOLUT_SANDBOX_PRIVATE_KEY_FILE="/etc/revolut/sandbox/privatecert.pem"
+  export OPERATOR_AUTH_CONFIG_FILE="/etc/revolut/sandbox/operator-auth.json"
   compose_args+=(-f compose.sandbox.yaml)
 fi
 
