@@ -1,5 +1,14 @@
 # Revolut Business Sandbox setup on Linux
 
+**Audience:** a designated administrator completing one-time Sandbox setup.
+Daily operators should not run these commands. Ask for supervised help if you
+are not responsible for server credentials and certificates.
+
+**Stop before starting** unless you have an approved change record, access to
+the organization password manager, and confirmation that this is the Sandbox
+tenant. Never paste a private key, token, password, or populated environment
+file into chat, email, a screenshot, or this repository.
+
 These instructions are written for a first-time Linux user. They use the Revolut **Sandbox only**. Sandbox and Production are separate environments with separate credentials and URLs.
 
 ## Before you begin

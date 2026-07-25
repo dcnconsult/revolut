@@ -1,5 +1,16 @@
 # Implementation checklist
 
+**Audience:** maintainers and release reviewers. This is not an operator task
+list. Operators should use [Start here](START_HERE.md).
+
+**How to read it:** “implemented” describes controls present in the test
+application, “diagnostic integration work” is unfinished maintainer work, and
+“production blockers” are reasons the system must remain Sandbox-only.
+
+> Historical note: some items below describe the earlier direct-payment
+> scaffold. The brokered-funding case workflow is the current operator path.
+> Do not infer that an unchecked item permits a manual workaround.
+
 ## +1 implemented in the scaffold
 
 1. Manual and ISO 20022 inputs normalize into one payment domain model.

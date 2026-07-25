@@ -1,5 +1,15 @@
 # ISO 20022 payment import
 
+**Audience:** maintainers and specialist reviewers. ISO 20022 import is not
+part of the current daily brokered-funding workflow.
+
+**Operator rule:** do not upload an XML payment file as a substitute for the
+private case ZIP, incoming-funding evidence, or a funding plan. If an XML file
+arrives, leave the case unchanged and ask the administrator which approved
+intake process applies.
+
+The remaining sections are a technical reference.
+
 ## Purpose
 
 This module adds file ingestion as an alternate input path to manual payment entry. It is parser and normalization machinery. The payment engine, funds checks, authorization, submission, and completion follow-up remain shared.

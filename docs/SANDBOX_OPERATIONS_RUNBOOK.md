@@ -1,165 +1,85 @@
-# Revolut Sandbox operations runbook
+# Daily Sandbox operations
 
-This runbook is for staff who need to confirm that the Sandbox service is
-working. It does not authorize live-data access or a transfer submission.
+**Audience:** the person checking the private operator console each working day.
 
-## Normal status
+This runbook confirms that the test service is healthy. It never authorizes
+live access or a payment.
 
-The expected application status is:
+## Normal result
 
-```text
-status=ok mode=sandbox
-```
+The application is ready for ordinary review when all of these are true:
 
-The daily monitor should end with:
+- the yellow banner says **REVOLUT SANDBOX · NO LIVE DATA**;
+- **Operations** is **Clear**;
+- **Backup** is **Fresh**;
+- the latest scheduled check passed;
+- there is no unexplained **Partial**, **Blocked**, **Failed**, or **Reversed**
+  case;
+- the release identifier matches the approved release record.
 
-```text
-REMOTE_MONITOR_OK mode=sandbox health=ok authentication=ok database=ok backup=fresh cron=active disk=ok bind=loopback
-```
+## Daily check
 
-The weekly prepared-only test should end with:
+1. Open the private console and sign in.
+2. Confirm the Sandbox banner.
+3. Read the **Operations** card.
+4. Read the **Backup** card.
+5. Refresh the funding case inbox.
+6. Review cases needing attention.
+7. Review **Recent Sandbox activity** for pending or failed items.
+8. Review **Consolidated operational report** for unresolved errors.
+9. Record the date, time, your name, release, and pass/fail result.
 
-```text
-REMOTE_SMOKE_OK mode=sandbox transfer=prepared-only idempotency=ok persistence=ok monitoring=ok backup=ok bind=loopback
-```
+If everything is normal, no further action is required.
 
-Neither scheduled workflow submits a transfer.
+## What each Operations state means
 
-## Automated schedule
+| State | Meaning | Operator action |
+|---|---|---|
+| Clear | No unresolved operational error | Continue normal review |
+| Degraded | A warning or retryable problem exists | Pause execution and review the safe report |
+| Blocked | A critical or non-retryable problem exists | Stop execution and contact the administrator |
+| Unavailable | The report could not be loaded | Treat as blocked |
 
-- **Daily at 06:17 UTC:** service health, Sandbox authentication, monitoring
-  database, backup freshness and checksum, backup cron, credential file
-  permissions, disk use, and loopback binding.
-- **Sunday at 03:17 server time:** local SQLite backup, retaining the newest
-  four verified backup pairs.
-- **Sunday at 04:47 UTC:** prepared-only smoke test, including restart
-  persistence and a fresh verified backup.
+## What transfer and execution states mean
 
-GitHub may start scheduled workflows later than the exact minute during busy
-periods.
+| State | Meaning | Operator action |
+|---|---|---|
+| Prepared / Draft | Checked but not submitted | Review or allow it to expire |
+| Authorized | Bound to one exact plan | Execute only after a final review |
+| Queued / Submitted | Sent or awaiting provider result | Reconcile; do not resubmit |
+| Pending | Provider has not given a final result | Wait and reconcile |
+| Partial | An earlier payout was submitted and later work stopped | Stop and escalate |
+| Reconciled / Completed | Final result has been observed | Export evidence |
+| Blocked / Failed | Processing cannot safely continue | Stop and escalate |
+| Reverted / Declined | Provider did not complete the payout | Stop and reconcile |
 
-If a scheduled check fails, GitHub creates or updates a repository issue whose
-title begins with `[Ops]`. A later successful scheduled run comments on and
-closes that issue automatically. Manual test failures do not create alert
-issues.
+## Respond to a problem
 
-## Run a check manually
+1. Stop the current action.
+2. Do not retry an upload, authorization, execution, or transfer repeatedly.
+3. Record the time, case reference or redacted transfer reference, release, and
+   exact plain-language message.
+4. Check whether the application labels the condition retryable.
+5. If a case is pending or ambiguous, use **Reconcile** rather than creating a
+   new request.
+6. Send the safe record to the administrator through the approved channel.
+7. Resume only after the administrator records resolution.
 
-1. Open the repository on GitHub.
-2. Select **Actions**.
-3. Choose **Check Revolut Sandbox from Droplet** for the read-only daily
-   monitor, or **Run Safe Remote Sandbox Smoke Test** for the prepared-only
-   weekly test.
-4. Select **Run workflow**.
-5. Wait for a green check and open the result.
-6. Confirm the final line begins with `REMOTE_MONITOR_OK` or
-   `REMOTE_SMOKE_OK`.
+Never include names, full account details, balances, package contents,
+passwords, tokens, cookies, recovery codes, or authenticator codes.
 
-Do not select an account-transfer workflow with execution enabled as part of
-routine monitoring.
+## Weekly administrator checks
 
-## Open the monitoring dashboard
+**Operators stop here.** The remaining work belongs to the designated
+administrator:
 
-From the authorized workstation, keep this command running:
+1. Confirm the scheduled Sandbox monitor completed.
+2. Confirm a recent backup set exists and its hashes verify.
+3. Review unresolved operational-error categories.
+4. Confirm the service still binds only to loopback.
+5. Confirm the provider host is the pinned Revolut Sandbox host.
+6. Confirm Production mode and public ingress remain disabled.
+7. Perform and record restore drills on the approved schedule.
 
-```powershell
-ssh -i C:\Users\novot\.ssh\revolut_deploy -L 3300:127.0.0.1:3000 deploy@178.128.36.90
-```
-
-Then open:
-
-```text
-http://127.0.0.1:3300/operator/
-```
-
-The application is intentionally unavailable on the Droplet's public port
-3000. Sign in with the privately supplied admin or read-only account. See
-[`SANDBOX_OPERATOR_CONSOLE.md`](SANDBOX_OPERATOR_CONSOLE.md).
-
-If the browser or tunnel is unavailable, use the authenticated text fallback
-from an interactive Droplet console:
-
-```bash
-bash /opt/revolut/current/scripts/deploy/run-operator-console.sh
-```
-
-## Operational errors
-
-The browser and text consoles include a consolidated error report backed by
-the same SQLite operations database. Repeated failures are grouped, messages
-are redacted before storage, and a successful call resolves earlier errors for
-that operation.
-
-- `clear`: no unresolved errors.
-- `degraded`: review warnings before continuing.
-- `blocked`: stop transfer submission and escalate to the administrator.
-
-The daily remote monitor treats `blocked` as a failure and uses the existing
-deduplicated GitHub `[Ops]` issue path. Email alerts and a fail-closed
-transaction-intent queue are future gated phases; neither is active.
-
-See
-[`ERROR_MONITORING_AND_OUTAGE_ROADMAP.md`](ERROR_MONITORING_AND_OUTAGE_ROADMAP.md)
-for the HTTP error playbook, redaction rules, and queue safety requirements.
-
-## Transfer states
-
-| State | Meaning | Routine action |
-| --- | --- | --- |
-| `prepared` | Validated locally; not submitted to Revolut | No action |
-| `submitted` | Accepted for processing by the Sandbox API | Ask a technical operator to reconcile |
-| `pending` | Sandbox processing has not finished | Wait, then reconcile |
-| `completed` | Sandbox operation completed | No action |
-| `failed`, `declined`, or `reverted` | Sandbox operation did not complete | Record the test reference and escalate |
-
-Scheduled automation should create only `prepared` records.
-
-## Respond to a failure
-
-1. Do not retry a submitted transfer and do not enable execution.
-2. Open the linked GitHub Actions run in the `[Ops]` issue.
-3. Note the reported step, such as `backup-freshness` or
-   `sandbox-authentication`.
-4. Confirm whether the latest deployment workflow is green.
-5. Send the issue link and failing step to the technical operator.
-
-Credentials, tokens, account identifiers, and balances must never be copied
-into an issue, chat message, or screenshot.
-
-## Off-droplet backup status
-
-Backups currently remain on the Droplet under `/var/backups/revolut`.
-Encrypted off-droplet disaster recovery requires a private object-storage
-bucket, endpoint, access key, secret key, and a separately retained encryption
-secret. Do not place any of those values in Git.
-
-The backup command has explicit storage and retention controls:
-
-```bash
-# Current scheduled behavior: keep four local weekly backups.
-bash /opt/revolut/current/scripts/deploy/backup-sandbox-database.sh \
-  --storage local --retention 4
-
-# Future behavior after object storage is configured.
-bash /opt/revolut/current/scripts/deploy/backup-sandbox-database.sh \
-  --storage object --retention 8
-```
-
-Retention is a count from 1 to 52. A value of `1` keeps only the newest backup,
-effectively overwriting the previous generation. Rotation deletes only files
-matching the application's timestamped SQLite-backup naming pattern and their
-checksum sidecars. Object mode always makes and retains a local staging backup
-before attempting the encrypted upload.
-
-The guarded upload command is:
-
-```bash
-bash /opt/revolut/current/scripts/deploy/upload-offsite-backup.sh --retention 8
-```
-
-It remains disabled until `/etc/revolut/offsite-backup.env` explicitly contains
-`OFFSITE_BACKUP_ENABLED=YES`. When enabled, it verifies the local checksum,
-encrypts the database for an `age` public recipient, and uploads only the
-encrypted file and its checksum through a root-managed `rclone`
-configuration. The decryption private key should be retained away from the
-Droplet.
+See [check backups and perform a restore drill](CASE_BACKUP_RESTORE.md) and
+[DigitalOcean deployment](DIGITALOCEAN_DEPLOYMENT.md).

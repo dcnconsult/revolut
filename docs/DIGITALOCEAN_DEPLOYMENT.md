@@ -1,5 +1,14 @@
 # DigitalOcean Sandbox deployment
 
+**Audience:** designated server administrators. Daily operators should follow
+[Use the Sandbox operator console](SANDBOX_OPERATOR_CONSOLE.md) and should not
+run commands from this page.
+
+**Before any change:** confirm the approved change record, take and verify a
+matched database-and-evidence backup, keep Production mode disabled, and have a
+tested rollback release. Never paste host addresses or credentials into this
+document.
+
 The Droplet currently runs the Revolut Business Sandbox internal-transfer
 provider. Sandbox and Production remain separate, and this deployment does not
 make the scaffold suitable for live-money submission.
@@ -19,7 +28,7 @@ The Sandbox API and operator console require local application authentication
 and remain reachable only through an SSH tunnel:
 
 ```bash
-ssh -L 3000:127.0.0.1:3000 deploy@178.128.36.90
+ssh -L 3000:127.0.0.1:3000 deploy@SANDBOX_HOST_FROM_INVENTORY
 curl http://127.0.0.1:3000/health
 ```
 
@@ -42,7 +51,7 @@ file; and leaves only SSH open in UFW.
 Before changing root login settings, open a second terminal and verify:
 
 ```bash
-ssh deploy@178.128.36.90
+ssh deploy@SANDBOX_HOST_FROM_INVENTORY
 docker version
 docker compose version
 ```
@@ -62,7 +71,7 @@ Add these environment secrets:
 
 | Secret | Value |
 | --- | --- |
-| `DROPLET_HOST` | `178.128.36.90` |
+| `DROPLET_HOST` | Retrieve the current value from the approved infrastructure inventory |
 | `DROPLET_USER` | `deploy` |
 | `DROPLET_SSH_KEY` | Private key matching an authorized key for `deploy` |
 | `DROPLET_KNOWN_HOSTS` | Verified `known_hosts` line for the Droplet |
@@ -71,7 +80,7 @@ Generate `DROPLET_KNOWN_HOSTS` from a trusted machine after independently
 checking the Droplet's ED25519 host-key fingerprint in its console:
 
 ```bash
-ssh-keyscan -t ed25519 178.128.36.90
+ssh-keyscan -t ed25519 SANDBOX_HOST_FROM_INVENTORY
 ```
 
 Do not accept an unverified first-seen host key inside the workflow.

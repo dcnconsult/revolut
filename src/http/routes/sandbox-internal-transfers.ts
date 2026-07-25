@@ -12,6 +12,7 @@ import type {
 
 interface SubmitBody {
   password?: string;
+  totp?: string;
   confirmation?: string;
 }
 
@@ -80,7 +81,12 @@ export async function sandboxInternalTransferRoutes(
         }
         const expectedPhrase = submitPhrase(prepared);
         if (request.body?.confirmation !== expectedPhrase ||
-            !auth.verifyAdminPassword(principal.username, request.body?.password ?? '', request.ip)) {
+            !auth.verifyAdminReauthentication(
+              principal.username,
+              request.body?.password ?? '',
+              request.body?.totp ?? '',
+              request.ip
+            )) {
           auth.audit(principal.username, principal.role, 'transfer_submit', 'reauthentication_denied', prepared.id);
           return reply.code(403).send({ error: 'Password or confirmation phrase is incorrect.' });
         }

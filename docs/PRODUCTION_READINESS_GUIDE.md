@@ -1,5 +1,15 @@
 # Revolut Production readiness guide
 
+**Audience:** owners, legal/compliance reviewers, security reviewers, and
+designated administrators. Daily operators must not perform these steps.
+
+**Current decision: NO-GO.** The application is Sandbox-only. Do not add
+Production credentials, change provider hosts, expose public ingress, upload
+live customer data, or conduct a live-money test. Promotion requires a new
+approved project and independent review of the legal entity, country, Revolut
+entity, permissions, safeguarding, segregation, AML responsibilities, fee
+authority, retention, and operating limits.
+
 This guide prepares the Sandbox deployment for a future Revolut Business
 Production integration. It does **not** authorize a Production connection or a
 live-money test.

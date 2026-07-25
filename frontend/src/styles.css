@@ -30,6 +30,7 @@ h2 { margin-bottom: .75rem; font-size: 1.25rem; letter-spacing: -.02em; }
 .button { border: 0; border-radius: 10px; padding: .72rem 1rem; font-weight: 750; }
 .button.primary { color: white; background: #16613f; }
 .button.ghost { color: #294438; background: #edf3f0; }
+.button.help-link { color: #174d35; background: #e2f2e9; text-decoration: none; white-space: nowrap; }
 .button.danger { color: white; background: #a42c2c; }
 .button:disabled { cursor: not-allowed; opacity: .55; }
 form { display: grid; gap: 16px; margin-top: 22px; }
@@ -38,6 +39,7 @@ label { display: grid; gap: 7px; color: #435149; font-size: .86rem; font-weight:
 input, select { width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid #cbd6d0; border-radius: 9px; color: #17201c; background: white; }
 input:focus, select:focus, button:focus-visible { outline: 3px solid #9ed4b8; outline-offset: 2px; }
 .login-card, .center-card { width: min(460px, 100%); margin: 9vh auto; padding: 34px; }
+.login-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .notice, .error { border-radius: 10px; padding: 12px 14px; }
 .notice { display: flex; justify-content: space-between; margin-top: 24px; color: #115238; background: #e3f5ec; }
 .notice button { border: 0; background: transparent; }
@@ -68,10 +70,20 @@ code { padding: 2px 5px; border-radius: 5px; background: #eef2f0; }
 .dot { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: #d19b3d; }
 .dot.success { background: #20a968; }
 .muted { color: #7a8680; }
+.case-workflow { margin-top: 32px; border-color: #b7d9c7; }
+.workflow-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 20px 0; padding: 0; list-style: none; }
+.workflow-steps li { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 9px; color: #44534b; background: #f2f7f4; font-size: .8rem; }
+.workflow-steps span { display: grid; place-items: center; width: 22px; height: 22px; flex: 0 0 22px; border-radius: 50%; color: white; background: #42765c; font-weight: 800; }
+.upload-row { grid-template-columns: 1fr auto; align-items: end; padding: 17px; border-radius: 12px; background: #f6faf8; }
+.section-intro { margin-top: 30px; }
+td small { display: block; margin-top: 5px; color: #718078; }
+.pill.intake_hold, .pill.quarantined, .pill.information_required, .pill.exception { color: #8a2323; background: #fae4e4; }
+.pill.approved, .pill.closed { color: #11643e; background: #dcf4e8; }
 @media (max-width: 850px) {
   .status-grid { grid-template-columns: repeat(2, 1fr); }
   .two-column { grid-template-columns: 1fr; }
   .prepare-form { grid-template-columns: 1fr; }
+  .workflow-steps { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 560px) {
   main { width: min(100% - 20px, 1180px); padding-top: 24px; }
@@ -79,4 +91,5 @@ code { padding: 2px 5px; border-radius: 5px; background: #eef2f0; }
   .user-panel { display: grid; justify-items: end; }
   .status-grid, .review { grid-template-columns: 1fr; }
   .panel, .login-card { padding: 20px; }
+  .workflow-steps, .upload-row { grid-template-columns: 1fr; }
 }

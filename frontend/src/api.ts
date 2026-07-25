@@ -45,7 +45,7 @@ export async function api<T>(
   csrfToken?: string
 ): Promise<T> {
   const headers = new Headers(init.headers);
-  if (init.body) headers.set('content-type', 'application/json');
+  if (typeof init.body === 'string') headers.set('content-type', 'application/json');
   if (csrfToken) headers.set('x-csrf-token', csrfToken);
   const response = await fetch(path, { ...init, headers, credentials: 'same-origin' });
   if (!response.ok) {

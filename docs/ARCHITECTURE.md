@@ -1,5 +1,16 @@
 # Architecture and promotion gates
 
+**Audience:** maintainers and reviewers. Daily operators do not need this page.
+For ordinary work, use [Start here](START_HERE.md).
+
+**Plain-language summary:** uploaded information creates a review case, not a
+payment. Independent funding evidence, a passing risk review, an exact plan,
+fresh human authorization, sequential Sandbox execution, and reconciliation
+are separate gates. Production and public ingress remain disabled.
+
+The material below is a technical reference. Do not use examples as operator
+instructions.
+
 ## Entry paths
 
 The system has two interchangeable ingestion paths:

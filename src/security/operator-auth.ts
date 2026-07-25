@@ -1,4 +1,4 @@
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { SandboxTransferStore } from '../storage/sandbox-transfer-store.js';
@@ -10,10 +10,12 @@ export interface PasswordCredential {
   role: 'admin' | 'viewer';
   salt: string;
   hash: string;
+  totpSecret?: string;
+  recoveryCodeHashes?: string[];
 }
 
 export interface OperatorCredentials {
-  version: 1;
+  version: 1 | 2;
   users: PasswordCredential[];
   automationTokenHash: string;
 }
@@ -28,6 +30,7 @@ interface Session extends OperatorPrincipal {
   tokenHash: string;
   createdAt: number;
   lastSeenAt: number;
+  mfaAt?: number;
 }
 
 const sessionCookie = 'revolut_operator_session';
@@ -38,7 +41,8 @@ const maximumLoginFailures = 5;
 
 export function loadOperatorCredentials(path: string): OperatorCredentials {
   const value = JSON.parse(readFileSync(path, 'utf8')) as Partial<OperatorCredentials>;
-  if (value.version !== 1 || !Array.isArray(value.users) || typeof value.automationTokenHash !== 'string') {
+  if (![1, 2].includes(Number(value.version)) || !Array.isArray(value.users) ||
+      typeof value.automationTokenHash !== 'string') {
     throw new Error('Operator credential file is invalid.');
   }
   const roles = value.users.map(user => user.role);
@@ -87,7 +91,7 @@ export class OperatorAuth {
     private readonly cookieSecure = false
   ) {}
 
-  login(username: string, password: string, remoteAddress: string) {
+  login(username: string, password: string, remoteAddress: string, totpOrRecovery = '') {
     const normalized = username.trim().toLowerCase().slice(0, 80);
     const failureKey = `${remoteAddress}:${normalized}`;
     const now = Date.now();
@@ -103,6 +107,16 @@ export class OperatorAuth {
       this.audit(normalized || 'unknown', credential?.role ?? 'viewer', 'login', 'denied');
       return undefined;
     }
+    if (credential.totpSecret) {
+      const mfa = this.verifyMfa(credential, totpOrRecovery);
+      if (!mfa) {
+        recentFailures.push(now);
+        this.failures.set(failureKey, recentFailures);
+        this.audit(normalized, credential.role, 'login_mfa', 'denied');
+        return undefined;
+      }
+      this.audit(normalized, credential.role, mfa === 'recovery' ? 'recovery_code' : 'login_mfa', 'success');
+    }
     this.failures.delete(failureKey);
     const rawToken = randomBytes(32).toString('base64url');
     const csrfToken = randomBytes(24).toString('base64url');
@@ -112,7 +126,8 @@ export class OperatorAuth {
       csrfToken,
       tokenHash: tokenHash(rawToken),
       createdAt: now,
-      lastSeenAt: now
+      lastSeenAt: now,
+      ...(credential.totpSecret ? { mfaAt: now } : {})
     };
     this.sessions.set(session.tokenHash, session);
     this.audit(session.username, session.role, 'login', 'success');
@@ -201,6 +216,24 @@ export class OperatorAuth {
     return valid;
   }
 
+  verifyAdminReauthentication(
+    username: string,
+    password: string,
+    totpOrRecovery: string,
+    remoteAddress: string
+  ) {
+    if (!this.verifyAdminPassword(username, password, remoteAddress)) return false;
+    const credential = this.credentials.users.find(user => user.username === username && user.role === 'admin');
+    if (!credential) return false;
+    if (!credential.totpSecret) {
+      this.audit(username, 'admin', 'reauthentication_mfa_legacy', 'success');
+      return true;
+    }
+    const result = this.verifyMfa(credential, totpOrRecovery);
+    this.audit(username, 'admin', 'reauthentication_mfa', result ? 'success' : 'denied');
+    return Boolean(result);
+  }
+
   setSessionCookie(reply: FastifyReply, rawToken: string) {
     const secure = this.cookieSecure ? '; Secure' : '';
     reply.header(
@@ -241,6 +274,25 @@ export class OperatorAuth {
       ...(session.csrfToken ? { csrfToken: session.csrfToken } : {})
     };
   }
+
+  private verifyMfa(credential: PasswordCredential, supplied: string) {
+    const normalized = supplied.trim().replaceAll(' ', '');
+    if (/^\d{6}$/.test(normalized) && credential.totpSecret) {
+      const nowStep = Math.floor(Date.now() / 30_000);
+      for (const step of [nowStep, nowStep - 1, nowStep + 1]) {
+        if (totp(credential.totpSecret, step) === normalized &&
+            this.store.recordTotpStep(credential.username, step)) {
+          return 'totp' as const;
+        }
+      }
+    }
+    const recoveryHash = createHash('sha256').update(normalized).digest('base64');
+    if (normalized.length >= 8 && credential.recoveryCodeHashes?.includes(recoveryHash) &&
+        this.store.consumeRecoveryCode(credential.username, recoveryHash)) {
+      return 'recovery' as const;
+    }
+    return undefined;
+  }
 }
 
 export function createTestCredentials(): OperatorCredentials {
@@ -254,4 +306,34 @@ export function createTestCredentials(): OperatorCredentials {
     ],
     automationTokenHash: tokenHash('automation-test-token')
   };
+}
+
+function totp(base32: string, step: number) {
+  const key = decodeBase32(base32);
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(step));
+  const digest = createHmac('sha1', key).update(counter).digest();
+  const offset = digest[digest.length - 1]! & 0x0f;
+  const binary = (
+    ((digest[offset]! & 0x7f) << 24) |
+    ((digest[offset + 1]! & 0xff) << 16) |
+    ((digest[offset + 2]! & 0xff) << 8) |
+    (digest[offset + 3]! & 0xff)
+  );
+  return String(binary % 1_000_000).padStart(6, '0');
+}
+
+function decodeBase32(value: string) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = '';
+  for (const character of value.toUpperCase().replaceAll('=', '')) {
+    const index = alphabet.indexOf(character);
+    if (index === -1) throw new Error('Invalid TOTP secret.');
+    bits += index.toString(2).padStart(5, '0');
+  }
+  const bytes: number[] = [];
+  for (let index = 0; index + 8 <= bits.length; index += 8) {
+    bytes.push(Number.parseInt(bits.slice(index, index + 8), 2));
+  }
+  return Buffer.from(bytes);
 }

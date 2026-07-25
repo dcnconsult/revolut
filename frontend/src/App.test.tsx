@@ -25,7 +25,8 @@ const server = setupServer(
     health: 'clear', unresolved: 0, critical: 0, warning: 0, retryable: 0,
     totalOccurrences: 0, byCategory: {}, generatedAt: new Date().toISOString()
   })),
-  http.get('/v1/sandbox/monitoring/errors', () => HttpResponse.json([]))
+  http.get('/v1/sandbox/monitoring/errors', () => HttpResponse.json([])),
+  http.get('/v1/cases', () => HttpResponse.json([]))
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
@@ -41,7 +42,13 @@ describe('operator console', () => {
     expect(screen.queryByText('Run a controlled Sandbox transfer')).not.toBeInTheDocument();
     expect(screen.getByText(/NO LIVE DATA/)).toBeInTheDocument();
     expect(await screen.findByText('Consolidated operational report')).toBeInTheDocument();
+    expect(screen.getByText('Funding case inbox')).toBeInTheDocument();
+    expect(screen.getByText('Match incoming credit')).toBeInTheDocument();
     expect(screen.getByText('No operational errors have been recorded.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open operator guide in a new window' }))
+      .toHaveAttribute('href', '/operator/help/index.html');
+    expect(screen.getByRole('link', { name: 'Open operator guide in a new window' }))
+      .toHaveAttribute('target', '_blank');
   });
 
   it('shows the sign-in form when no session exists', async () => {
@@ -53,5 +60,7 @@ describe('operator console', () => {
     expect(await screen.findByRole('heading', { name: 'Sandbox operator sign in' })).toBeInTheDocument();
     expect(screen.getByLabelText('Username')).toBeInTheDocument();
     expect(screen.getByLabelText('Password')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open operator guide in a new window' }))
+      .toHaveAttribute('rel', 'noopener noreferrer');
   });
 });

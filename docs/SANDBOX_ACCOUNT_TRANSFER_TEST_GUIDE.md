@@ -1,100 +1,79 @@
-# Revolut Sandbox account transfer test
+# Run a controlled Sandbox account-transfer test
 
-## Who this guide is for
+**Audience:** an administrator asked to test the advanced diagnostic tool.
 
-This guide is for colleagues who do not work with code or servers. It tests a
-small transfer between two accounts owned by our Revolut Sandbox business.
+This test moves a very small synthetic amount between two owned Revolut
+Sandbox accounts. It is separate from funding cases. It does not prove a
+beneficiary, funding match, case approval, or Production readiness.
 
-Revolut states that Sandbox and Production are independent. This workflow is
-also hard-coded to the Sandbox API host and refuses the Production API URL.
+## Before you start
 
-## What the test does
+1. Confirm the yellow banner says **REVOLUT SANDBOX · NO LIVE DATA**.
+2. Confirm **Operations** is **Clear** and **Backup** is **Fresh**.
+3. Confirm your access card says **Admin**.
+4. Confirm an administrator requested this diagnostic.
+5. Confirm no earlier test is pending or awaiting reconciliation.
 
-The test:
+Stop if any check fails.
 
-- finds two active Sandbox accounts in the same currency;
-- checks that the source has enough test funds;
-- limits the amount to between `0.01` and `10.00`;
-- creates a unique request ID so the same request cannot be processed twice;
-- uses `POST /transfer`, Revolut's account-to-account transfer endpoint;
-- prints only the mode, state, amount, currency, Sandbox host, and permission.
+## Prepare the test
 
-It never prints account IDs, balances, tokens, certificates, or private keys.
+1. Open **Advanced diagnostic — Direct owned-account transfer test**.
+2. Choose the approved source Sandbox account.
+3. Choose a different approved destination Sandbox account.
+4. Enter the currency supported by both accounts.
+5. Enter the approved amount. Use the smallest allowed value unless the test
+   record says otherwise.
+6. Enter a clearly synthetic reference.
+7. Select **Prepare test** once.
 
-The application API runs in loopback-only Sandbox mode. This optional transfer
-test remains a separate one-shot container with no network port. Routine
-monitoring uses the prepared-only smoke workflow instead and does not execute
-`POST /transfer`.
+Preparation validates the request but does not submit it. The prepared record
+expires after 15 minutes.
 
-## Before an executed test
+## Review before submission
 
-The project owner must confirm that:
+Read the prepared summary and confirm:
 
-- the Sandbox API certificate has `READ` and `PAY` consent;
-- the current Sandbox credentials have been installed on the Droplet;
-- at least two active Sandbox accounts exist in the same currency;
-- the source account contains at least the selected amount of Sandbox test funds.
+- source and destination are different owned Sandbox accounts;
+- currency matches both accounts;
+- amount is within the displayed ceiling;
+- reference clearly identifies a Sandbox test;
+- environment is Sandbox and live data is false.
 
-`PAY` can initiate transactions, so it must be enabled only for the independent
-Sandbox certificate. Never enable it for Production as part of this procedure.
+If any value is wrong, let the preparation expire and start again. Do not
+submit it.
 
-## Run a dry run
+## Submit once
 
-1. Open the [`dcnconsult/revolut` Actions page](https://github.com/dcnconsult/revolut/actions).
-2. Select **Test Sandbox Account Transfer**.
-3. Select **Run workflow**.
-4. Leave the branch set to `master`.
-5. Leave **Sandbox test amount** at `0.01`.
-6. Leave **Move Sandbox test funds** turned off.
-7. Select the green **Run workflow** button.
+1. Re-enter your password.
+2. Enter a fresh authenticator code.
+3. Type the exact confirmation phrase shown on screen.
+4. Select **Submit Sandbox transfer** once.
+5. Wait for the displayed result.
 
-A green dry run ends with:
+Do not repeat submission because the page is slow or the result is pending.
+The application keeps one stable provider request ID so reconciliation can
+determine what happened without double payment.
 
-```text
-PHASE3_SANDBOX_TRANSFER_READY execution=DRY_RUN state=not_submitted amount=0.01 currency=GBP host=sandbox-b2b.revolut.com permission=PAY_required live_data=false
-```
+## Reconcile
 
-The currency may differ. `DRY_RUN` and `state=not_submitted` prove no transfer
-was created.
-
-## Execute the Sandbox transfer
-
-Run this only after the project owner approves the specific test.
-
-1. Repeat the dry-run steps.
-2. Set the approved amount, normally `0.01`.
-3. Turn on **Move Sandbox test funds**.
-4. Select **Run workflow**.
-5. Open the run and select **Sandbox-only account transfer**.
-
-A successful executed test ends with:
-
-```text
-PHASE3_SANDBOX_TRANSFER_OK execution=EXECUTED state=completed amount=0.01 currency=GBP host=sandbox-b2b.revolut.com permission=PAY live_data=false
-```
-
-The state may briefly be `pending` depending on Sandbox behaviour.
-
-## Stop and report
-
-Stop if:
-
-- the host is anything other than `sandbox-b2b.revolut.com`;
-- `live_data` is anything other than `false`;
-- the requested amount is unexpected;
-- the workflow reports `PHASE3_SANDBOX_TRANSFER_FAILED`.
-
-Send the maintainer only the workflow link and the single result or failure
-line. Do not copy environment values or full authentication logs.
+1. Find the test under **Recent Sandbox activity**.
+2. If it is pending or unclear, select **Reconcile** once.
+3. Record the final state and time.
+4. Stop and report a failed, reverted, declined, or still-ambiguous result.
 
 ## Test record
 
 Record only:
 
 - date and time;
-- tester's name;
-- GitHub Actions run link;
-- dry run or executed;
-- amount, currency, and final state.
+- operator name;
+- release identifier;
+- redacted transfer reference;
+- amount and currency;
+- prepared result;
+- final reconciled result;
+- incident reference, if any.
 
-Do not record account IDs, balances, certificates, tokens, or keys.
+Do not copy account identifiers, tokens, passwords, cookies, balances, or
+browser developer-tool output into the test record.

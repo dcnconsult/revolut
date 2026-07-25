@@ -1,5 +1,11 @@
 # Sandbox automation closeout
 
+**Audience:** operators and release reviewers.
+
+**Operator takeaway:** the service remains private and Sandbox-only. Begin with
+[Start here](START_HERE.md), stop when Operations is not Clear or Backup is not
+Fresh, and never treat this closeout note as authorization to execute.
+
 ## Current operating state
 
 - The DigitalOcean Droplet runs the Revolut Business Sandbox provider.

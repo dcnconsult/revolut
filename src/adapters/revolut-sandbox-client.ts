@@ -30,6 +30,27 @@ export interface RevolutSandboxTransfer {
   completed_at?: string;
 }
 
+export interface RevolutSandboxTransaction {
+  id: string;
+  state: string;
+  type?: string;
+  reference?: string;
+  created_at?: string;
+  completed_at?: string;
+  legs?: Array<{
+    account_id?: string;
+    amount: string;
+    currency: string;
+  }>;
+}
+
+export interface RevolutSandboxCounterparty {
+  id: string;
+  name: string;
+  state?: string;
+  accounts?: Array<{ id: string; currency?: string }>;
+}
+
 export interface SandboxInternalTransferClient {
   getAccounts(): Promise<RevolutSandboxAccount[]>;
   createInternalTransfer(input: {
@@ -41,6 +62,23 @@ export interface SandboxInternalTransferClient {
     reference: string;
   }): Promise<RevolutSandboxTransfer>;
   getTransaction(transactionId: string): Promise<RevolutSandboxTransfer>;
+  listTransactions?(): Promise<RevolutSandboxTransaction[]>;
+  simulateTopUp?(input: {
+    accountId: string;
+    amount: number;
+    currency: string;
+    reference: string;
+  }): Promise<RevolutSandboxTransfer>;
+  getCounterparties?(): Promise<RevolutSandboxCounterparty[]>;
+  createCounterpartyPayment?(input: {
+    requestId: string;
+    sourceAccountId: string;
+    counterpartyId: string;
+    paymentMethodId: string;
+    amount: number;
+    currency: string;
+    reference: string;
+  }): Promise<RevolutSandboxTransfer>;
 }
 
 interface SandboxCredentialFiles {
@@ -106,6 +144,74 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
   async getTransaction(transactionId: string) {
     if (!/^[0-9a-f-]{36}$/i.test(transactionId)) throw new Error('Invalid Sandbox transaction ID.');
     return this.parseTransfer(await this.request(`/transaction/${encodeURIComponent(transactionId)}`));
+  }
+
+  async listTransactions() {
+    const result = await this.request('/transactions?count=100');
+    if (!Array.isArray(result)) throw new Error('Revolut Sandbox /transactions did not return a list.');
+    return result.map(value => this.parseTransaction(value));
+  }
+
+  async simulateTopUp(input: {
+    accountId: string;
+    amount: number;
+    currency: string;
+    reference: string;
+  }) {
+    return this.parseTransfer(await this.request('/sandbox/topup', {
+      method: 'POST',
+      body: {
+        account_id: input.accountId,
+        amount: input.amount,
+        currency: input.currency,
+        reference: input.reference,
+        state: 'completed'
+      }
+    }));
+  }
+
+  async getCounterparties() {
+    const result = await this.request('/counterparties');
+    if (!Array.isArray(result)) throw new Error('Revolut Sandbox /counterparties did not return a list.');
+    return result.map(value => {
+      const id = this.stringField(value, 'id');
+      const name = this.stringField(value, 'name');
+      if (!id || !name) throw new Error('Revolut Sandbox returned an invalid counterparty.');
+      const state = this.stringField(value, 'state');
+      const rawAccounts = this.field(value, 'accounts');
+      const accounts = Array.isArray(rawAccounts)
+        ? rawAccounts.map(account => ({
+            id: this.stringField(account, 'id'),
+            ...(this.stringField(account, 'currency') ? { currency: this.stringField(account, 'currency') } : {})
+          })).filter(account => account.id)
+        : [];
+      return { id, name, ...(state ? { state } : {}), ...(accounts.length > 0 ? { accounts } : {}) };
+    });
+  }
+
+  async createCounterpartyPayment(input: {
+    requestId: string;
+    sourceAccountId: string;
+    counterpartyId: string;
+    paymentMethodId: string;
+    amount: number;
+    currency: string;
+    reference: string;
+  }) {
+    return this.parseTransfer(await this.request('/pay', {
+      method: 'POST',
+      body: {
+        request_id: input.requestId,
+        account_id: input.sourceAccountId,
+        receiver: {
+          counterparty_id: input.counterpartyId,
+          account_id: input.paymentMethodId
+        },
+        amount: input.amount,
+        currency: input.currency,
+        reference: input.reference
+      }
+    }));
   }
 
   private async request(path: string, options: { method?: string; body?: unknown } = {}) {
@@ -264,6 +370,30 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
       state,
       ...(createdAt ? { created_at: createdAt } : {}),
       ...(completedAt ? { completed_at: completedAt } : {})
+    };
+  }
+
+  private parseTransaction(value: unknown): RevolutSandboxTransaction {
+    const transfer = this.parseTransfer(value);
+    const rawLegs = this.field(value, 'legs');
+    const legs = Array.isArray(rawLegs)
+      ? rawLegs.map(leg => {
+          const amount = String(this.field(leg, 'amount') ?? '');
+          const currency = this.stringField(leg, 'currency');
+          if (!/^-?\d+(?:\.\d+)?$/.test(amount) || !currency) {
+            throw new Error('Revolut Sandbox returned an invalid transaction leg.');
+          }
+          const accountId = this.stringField(leg, 'account_id');
+          return { amount, currency, ...(accountId ? { account_id: accountId } : {}) };
+        })
+      : [];
+    const type = this.stringField(value, 'type');
+    const reference = this.stringField(value, 'reference');
+    return {
+      ...transfer,
+      ...(type ? { type } : {}),
+      ...(reference ? { reference } : {}),
+      ...(legs.length > 0 ? { legs } : {})
     };
   }
 
