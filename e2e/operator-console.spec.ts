@@ -56,7 +56,7 @@ test('login screen has no automatically detectable accessibility violations', as
   expect(results.violations).toEqual([]);
 });
 
-test('operator guide opens beside the console, is searchable, and is accessible', async ({ page }) => {
+test('broker guide opens beside the console, is searchable, and is accessible', async ({ page }) => {
   await page.goto('.');
   const popupPromise = page.waitForEvent('popup');
   await page.getByRole('link', { name: 'Open operator guide in a new window' }).click();
@@ -64,12 +64,12 @@ test('operator guide opens beside the console, is searchable, and is accessible'
   await guide.waitForLoadState('domcontentloaded');
 
   await expect(guide).toHaveURL(/\/operator\/help\/index\.html$/);
-  await expect(guide.getByRole('heading', { name: 'Operator guide', exact: true })).toBeVisible();
-  await expect(guide.getByRole('heading', { name: 'Work a funding case in order' })).toBeVisible();
+  await expect(guide.getByRole('heading', { name: 'Broker guide', exact: true })).toBeVisible();
+  await expect(guide.getByRole('heading', { name: 'Move through the case in order' })).toBeVisible();
 
   await guide.getByLabel('Find a word or task').fill('pending');
   await expect(guide.getByRole('status')).toContainText('guide section');
-  await expect(guide.getByRole('heading', { name: 'Authorize and execute', exact: true })).toBeVisible();
+  await expect(guide.getByRole('heading', { name: 'Authorize the approved plan, then execute', exact: true })).toBeVisible();
   await expect(guide.getByRole('heading', { name: 'Complete the daily check' })).toBeHidden();
 
   await guide.getByLabel('Find a word or task').fill('');
