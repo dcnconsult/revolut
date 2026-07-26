@@ -4,187 +4,198 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light" />
-    <meta name="description" content="Step-by-step guide for the Revolut Sandbox funding-case operator." />
-    <title>Operator Guide · Revolut Sandbox</title>
+    <meta name="description" content="Plain-language guide for brokers reviewing funding cases in Revolut Sandbox." />
+    <title>Broker Guide · Revolut Sandbox</title>
     <link rel="stylesheet" href="./help.css" />
     <script src="./help.js" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to guide</a>
-    <header class="environment">REVOLUT SANDBOX · NO LIVE MONEY</header>
+    <header class="environment">REVOLUT SANDBOX · NO LIVE DATA</header>
     <div class="layout">
       <aside class="sidebar" aria-label="Guide navigation">
         <div class="brand">
           <p class="eyebrow">Side-by-side reference</p>
-          <h1>Operator guide</h1>
-          <p>Keep this window open beside the application.</p>
+          <h1>Broker guide</h1>
+          <p>Friendly, step-by-step help for reviewing a funding case.</p>
+          <a class="companion-link" href="./workflows.html">View the workflow map →</a>
         </div>
         <label class="search-label" for="guide-search">Find a word or task</label>
         <input id="guide-search" type="search" placeholder="Try “pending” or “upload”" autocomplete="off" />
         <p id="search-status" class="search-status" role="status" aria-live="polite"></p>
         <nav>
-          <a href="#start">Start here</a>
+          <a href="#start">Get ready</a>
           <a href="#daily">Daily check</a>
-          <a href="#case">Work a funding case</a>
-          <a href="#findings">Resolve findings</a>
-          <a href="#funding">Match funds</a>
-          <a href="#decision">Make a decision</a>
-          <a href="#plan">Review a plan</a>
+          <a href="#case">Broker workflow</a>
+          <a href="#findings">Clear findings</a>
+          <a href="#funding">Confirm funding</a>
+          <a href="#decision">Record a decision</a>
+          <a href="#plan">Confirm the plan</a>
           <a href="#execute">Authorize and execute</a>
-          <a href="#reconcile">Reconcile and export</a>
+          <a href="#reconcile">Close the case</a>
           <a href="#states">Status meanings</a>
-          <a href="#problems">If something goes wrong</a>
-          <a href="#security">Safety rules</a>
-          <a href="#glossary">Plain-language glossary</a>
+          <a href="#problems">Pause and get help</a>
+          <a href="#security">Protect the case</a>
+          <a href="#glossary">Broker glossary</a>
         </nav>
         <button id="print-guide" class="print-button" type="button">Print this guide</button>
       </aside>
 
       <main id="main">
-        <section id="start" data-guide-section data-search="open login sign in begin access tunnel browser">
-          <p class="eyebrow">Start here</p>
-          <h2>Before you do anything</h2>
-          <div class="callout safe"><strong>Confirm the yellow Sandbox banner.</strong> Stop immediately if the application does not say “REVOLUT SANDBOX · NO LIVE DATA.”</div>
+        <section id="start" data-guide-section data-search="open login sign in begin access tunnel browser broker administrator admin">
+          <p class="eyebrow">Welcome</p>
+          <h2>Get ready to begin</h2>
+          <p>This guide is for the broker who reviews the funding request and records the final human decision. Your access level may appear as <strong>Administrator</strong> in the application.</p>
+          <div class="callout safe"><strong>First, confirm the yellow Sandbox banner.</strong> You are in the right place when it says “REVOLUT SANDBOX · NO LIVE DATA.” If the banner is missing or different, pause and contact your administrator.</div>
+          <p>These opening checks take less than a minute:</p>
           <ol class="steps">
             <li><span>1</span><div>Open the private application address supplied by your administrator.</div></li>
-            <li><span>2</span><div>Sign in with your own account. Never use another person’s account.</div></li>
-            <li><span>3</span><div>Enter the current six-digit authenticator code when requested. A recovery code is for emergency one-time use only.</div></li>
-            <li><span>4</span><div>Check the <strong>Operations</strong> card. Continue only when it says <strong>Clear</strong>.</div></li>
-            <li><span>5</span><div>Check the <strong>Backup</strong> card. If it says Missing, Stale, or Unavailable, do not authorize execution.</div></li>
+            <li><span>2</span><div>Sign in with your own account so the case record correctly shows who completed the review.</div></li>
+            <li><span>3</span><div>Enter the current six-digit authenticator code when requested. Save a recovery code for emergency one-time use only.</div></li>
+            <li><span>4</span><div>Check the <strong>Operations</strong> card. <strong>Clear</strong> means the review can continue.</div></li>
+            <li><span>5</span><div>Check the <strong>Backup</strong> card. <strong>Fresh</strong> is required before you authorize a funding plan.</div></li>
           </ol>
-          <p class="next"><strong>Expected result:</strong> You are signed in, the environment is Sandbox, Operations is Clear, and the backup is Fresh.</p>
+          <p class="next"><strong>You are ready when:</strong> you are signed in, the environment is Sandbox, Operations is Clear, and Backup is Fresh.</p>
         </section>
 
         <section id="daily" data-guide-section data-search="daily health operations backup clear fresh status check">
-          <p class="eyebrow">Routine procedure</p>
+          <p class="eyebrow">A quick daily routine</p>
           <h2>Complete the daily check</h2>
+          <p>Use the status cards to make sure the broker desk is ready before you open or continue a case.</p>
           <ol>
             <li>Read the yellow environment banner.</li>
             <li>Confirm <strong>Operations: Clear</strong>.</li>
             <li>Confirm <strong>Backup: Fresh</strong>.</li>
             <li>Look for cases marked <strong>Quarantined</strong>, <strong>Intake Hold</strong>, <strong>Information Required</strong>, <strong>Partial</strong>, or <strong>Blocked</strong>.</li>
-            <li>Record the date, time, your name, and whether the check passed.</li>
+            <li>Record the date, time, your name, and whether the daily check passed.</li>
           </ol>
-          <div class="callout stop"><strong>Stop condition:</strong> Operations is Blocked, backup is not Fresh, the Sandbox banner is missing, or a case has an unexplained Partial or Blocked execution.</div>
+          <div class="callout stop"><strong>Pause and ask for help if:</strong> Operations is Blocked, Backup is not Fresh, the Sandbox banner is missing, or a case has an unexplained Partial or Blocked execution.</div>
         </section>
 
         <section id="case" data-guide-section data-search="case workflow upload zip package inbox nine steps">
-          <p class="eyebrow">Nine-step workflow</p>
-          <h2>Work a funding case in order</h2>
-          <p>An uploaded package creates a case. It does not prove money arrived and it does not authorize a payment.</p>
+          <p class="eyebrow">The broker workflow</p>
+          <h2>Move through the case in order</h2>
+          <p>The case moves from intake to broker review, decision, execution, and closeout. The application helps organize the evidence and checks; you make the broker decision.</p>
+          <div class="callout note"><strong>Important distinction:</strong> an uploaded package creates a case record. It is not proof of incoming funds and it does not authorize a payout.</div>
+          <p><a href="./workflows.html">Open the high-level workflow map</a> for a one-page visual view.</p>
           <ol class="steps compact">
-            <li><span>1</span><div><strong>Upload package.</strong> Choose the private ZIP and select <em>Upload to quarantine</em> once.</div></li>
+            <li><span>1</span><div><strong>Receive the case.</strong> Choose the private ZIP and select <em>Upload to quarantine</em> once.</div></li>
             <li><span>2</span><div><strong>Review package health.</strong> Wait for scanning and validation to finish.</div></li>
-            <li><span>3</span><div><strong>Compare claims.</strong> Read what the sender claimed and what the checks found.</div></li>
-            <li><span>4</span><div><strong>Add cited evidence.</strong> Correct a claim only with a reason and evidence reference.</div></li>
-            <li><span>5</span><div><strong>Match the incoming credit.</strong> Use provider observations, never the uploaded package.</div></li>
-            <li><span>6</span><div><strong>Approve, reject, or request information.</strong> Approval is allowed only when every required check passes.</div></li>
-            <li><span>7</span><div><strong>Review payouts and fees.</strong> The total must exactly equal the matched receipt.</div></li>
-            <li><span>8</span><div><strong>Authorize and execute.</strong> Verify the exact plan, then re-enter password, fresh MFA, and phrase.</div></li>
-            <li><span>9</span><div><strong>Reconcile and export.</strong> Confirm final provider results and download the evidence record.</div></li>
+            <li><span>3</span><div><strong>Complete the broker review.</strong> Compare submitted claims, machine findings, and your professional review.</div></li>
+            <li><span>4</span><div><strong>Add cited evidence.</strong> If a claim needs correction, record the reason, source, and evidence reference.</div></li>
+            <li><span>5</span><div><strong>Confirm the funding receipt.</strong> Match the expected receipt to an independent provider observation.</div></li>
+            <li><span>6</span><div><strong>Record the broker decision.</strong> Approve, request information, or reject based on the evidence and required risk areas.</div></li>
+            <li><span>7</span><div><strong>Confirm payouts and fees.</strong> Customer payouts, broker fee, provider fees, reserve, and refund must equal the matched receipt.</div></li>
+            <li><span>8</span><div><strong>Authorize and execute.</strong> Confirm the exact funding plan, then complete the separate authorization and execution checks.</div></li>
+            <li><span>9</span><div><strong>Reconcile and close.</strong> Confirm final provider results and retain the signed evidence bundle.</div></li>
           </ol>
         </section>
 
         <section id="findings" data-guide-section data-search="finding hard block amendment evidence correction cited information required">
-          <p class="eyebrow">Review</p>
-          <h2>Resolve findings without overwriting history</h2>
+          <p class="eyebrow">Evidence review</p>
+          <h2>Clear findings with cited evidence</h2>
+          <p>A finding tells you what passed, what needs attention, or what prevents the case from moving forward.</p>
           <ol>
-            <li>Read each blocked reason and its “what is needed next” instruction.</li>
+            <li>Read each finding and the related “what is needed next” instruction.</li>
             <li>Obtain new evidence from an approved source.</li>
             <li>Add an amendment with the corrected value, reason, source, and evidence reference.</li>
-            <li>Check that the machine review ran again.</li>
-            <li>Do not mark a hard block as “accepted risk.” Hard blocks must be resolved by evidence or the case must be rejected.</li>
+            <li>Confirm the machine review runs again and read the updated result.</li>
+            <li>If a hard block remains, request the needed information or reject the case. A hard block cannot be accepted as risk.</li>
           </ol>
-          <div class="callout note"><strong>Remember:</strong> The original claim stays in the record. Your amendment is added after it so reviewers can see what changed.</div>
+          <div class="callout note"><strong>The history stays clear:</strong> the original claim remains in the record, and your amendment shows what changed and why.</div>
         </section>
 
         <section id="funding" data-guide-section data-search="funding match incoming credit top up simulation receipt possible unmatched reversed">
-          <p class="eyebrow">Independent evidence</p>
-          <h2>Match the incoming funds</h2>
+          <p class="eyebrow">Independent funding evidence</p>
+          <h2>Confirm the matched funding receipt</h2>
+          <p>The funding receipt must come from a provider observation, separate from the submitted package.</p>
           <ol>
             <li>Confirm all non-funding hard blocks are resolved.</li>
-            <li>Select the funding refresh action.</li>
-            <li>For a test only, use the clearly labeled Sandbox simulation option. Never describe it as real settlement.</li>
-            <li>Confirm there is exactly one credit matching account, currency, amount, and reference.</li>
-            <li>Continue only when Funding says <strong>Matched</strong>.</li>
+            <li>Select the funding refresh action to read the latest provider observations.</li>
+            <li>For training, the clearly labeled Sandbox simulation option may be used. Record it as a simulation, not as real settlement.</li>
+            <li>Confirm exactly one credit matches the provider account, currency, amount, and payment reference.</li>
+            <li>Move forward when Funding says <strong>Matched</strong>.</li>
           </ol>
-          <div class="callout stop"><strong>Do not continue</strong> when Funding says Possible Match, Unmatched, Awaiting Funds, or Reversed.</div>
+          <div class="callout stop"><strong>Pause the case</strong> when Funding says Possible Match, Unmatched, Awaiting Funds, or Reversed. The receipt is not yet confirmed.</div>
         </section>
 
         <section id="decision" data-guide-section data-search="approve reject request information decision risk low">
-          <p class="eyebrow">Human decision</p>
-          <h2>Approve, reject, or request information</h2>
+          <p class="eyebrow">Broker decision</p>
+          <h2>Record the appropriate case outcome</h2>
+          <p>Choose the outcome that best reflects the evidence available now:</p>
           <ul class="choice-list">
-            <li><strong>Approve:</strong> every required risk area passes, funding is Matched, and the purpose is understood.</li>
-            <li><strong>Request information:</strong> evidence is missing or unclear but may be supplied safely.</li>
-            <li><strong>Reject:</strong> the case is unacceptable, evidence cannot resolve it, or the package is unsafe.</li>
+            <li><strong>Approve</strong> when every required risk area passes, funding is Matched, and the purpose is understood.</li>
+            <li><strong>Request information</strong> when specific evidence is missing or unclear and can be supplied safely.</li>
+            <li><strong>Reject</strong> when the request cannot proceed or the evidence cannot safely resolve the concern.</li>
           </ul>
-          <p>Always write a short factual reason. Do not use “looks fine” or “approved by system.” The operator owns the human decision.</p>
+          <p>Add a short, factual reason that another reviewer can follow. For example, name the evidence that supports the outcome instead of writing “looks fine” or “approved by system.” The broker owns the human decision.</p>
         </section>
 
         <section id="plan" data-guide-section data-search="plan allocation payout broker fee provider reserve refund exact balance beneficiary">
-          <p class="eyebrow">Money check</p>
-          <h2>Review the exact funding plan</h2>
-          <p>Check every line, including small fees.</p>
+          <p class="eyebrow">Funding plan review</p>
+          <h2>Confirm payouts, fees, reserve, and refund</h2>
+          <p>The funding plan is the exact use of the matched receipt. Review every line, including small fees.</p>
           <ol>
             <li>Confirm the receipt amount and currency match the observed credit.</li>
             <li>Confirm each beneficiary name and payment destination.</li>
             <li>Confirm each customer payout.</li>
             <li>Confirm the broker fee and provider fees.</li>
             <li>Confirm any reserve or refund is explicit.</li>
-            <li>Add every line. The total must equal the receipt exactly.</li>
+            <li>Add every line. The plan total must equal the matched receipt exactly.</li>
           </ol>
           <div class="formula">Matched receipt = customer payouts + broker fee + provider fees + reserve/refund</div>
         </section>
 
         <section id="execute" data-guide-section data-search="authorize execute password mfa phrase sequential payment pending ambiguous">
-          <p class="eyebrow">High-impact action</p>
-          <h2>Authorize and execute</h2>
+          <p class="eyebrow">Final confirmation</p>
+          <h2>Authorize the approved plan, then execute</h2>
+          <p>Authorization applies to one exact version of the funding plan. Take your time and complete each confirmation once.</p>
           <ol>
             <li>Read the plan version and digest shown by the application.</li>
             <li>Confirm no evidence, beneficiary, allocation, funding, or provider detail changed.</li>
             <li>Type the exact authorization phrase shown.</li>
             <li>Enter your password and a fresh authenticator code.</li>
-            <li>Authorize once.</li>
+            <li>Select Authorize once.</li>
             <li>Review the plan again before execution.</li>
             <li>Enter the separate execution phrase, password, and fresh code.</li>
-            <li>Select Execute once and wait for the result.</li>
+            <li>Select Execute once, then allow the provider result to return.</li>
           </ol>
-          <div class="callout stop"><strong>Never click again because the screen is slow.</strong> A pending or unclear result must be reconciled before any further action.</div>
+          <div class="callout stop"><strong>If the result is slow, pending, or unclear, pause here.</strong> Reconcile the existing request before taking any further action; do not select Execute again.</div>
         </section>
 
         <section id="reconcile" data-guide-section data-search="reconcile export evidence closed completed partial final result download">
-          <p class="eyebrow">Close the case</p>
-          <h2>Reconcile and export evidence</h2>
+          <p class="eyebrow">Case closeout</p>
+          <h2>Confirm provider results and close the case</h2>
+          <p>Reconciliation confirms what the provider actually completed before the case is closed.</p>
           <ol>
             <li>Select Reconcile for non-final provider results.</li>
             <li>Confirm every submitted payout is Completed.</li>
             <li>Confirm no later payout was submitted after a failed, pending, reverted, declined, or unclear result.</li>
-            <li>Continue reconciliation until the case says Reconciled, or stop and escalate.</li>
+            <li>Continue reconciliation until the case says Reconciled. If it cannot reach a final state, pause and ask for support.</li>
             <li>Download the signed evidence bundle.</li>
             <li>Record the case reference, date, final state, and evidence filename.</li>
           </ol>
-          <p class="next"><strong>Expected result:</strong> Case is Closed, Execution is Reconciled, and the signed evidence file is retained.</p>
+          <p class="next"><strong>The case is complete when:</strong> Case is Closed, Execution is Reconciled, and the signed evidence bundle is retained in the approved location.</p>
         </section>
 
         <section id="states" data-guide-section data-search="status meaning quarantined hold broker information approved closed awaiting matched reversed plan authorized queued partial blocked failed">
-          <p class="eyebrow">Reference</p>
-          <h2>What the statuses mean</h2>
+          <p class="eyebrow">Your next-step reference</p>
+          <h2>Use the status to choose what happens next</h2>
           <div class="table-wrap">
             <table>
               <thead><tr><th>Status</th><th>Plain meaning</th><th>Your action</th></tr></thead>
               <tbody>
                 <tr><td>Quarantined</td><td>The package has not passed private safety scanning.</td><td>Wait. Do not open files.</td></tr>
                 <tr><td>Intake Hold</td><td>Important package or evidence problems exist.</td><td>Read “what is needed next.”</td></tr>
-                <tr><td>Awaiting Broker</td><td>The case is ready for human review.</td><td>Review claims and evidence.</td></tr>
+                <tr><td>Awaiting Broker</td><td>The case is ready for your broker review.</td><td>Review claims, findings, and evidence.</td></tr>
                 <tr><td>Information Required</td><td>The case needs more evidence.</td><td>Request and cite new evidence.</td></tr>
-                <tr><td>Approved</td><td>The human decision passed current checks.</td><td>Review the exact plan.</td></tr>
+                <tr><td>Approved</td><td>The broker decision passed the current checks.</td><td>Review the exact funding plan.</td></tr>
                 <tr><td>Matched</td><td>Exactly one incoming provider credit matches.</td><td>Continue if other checks pass.</td></tr>
-                <tr><td>Possible Match</td><td>More than one credit may match.</td><td>Stop and investigate.</td></tr>
-                <tr><td>Reversed</td><td>Previously matched funding no longer qualifies.</td><td>Stop; authorization is invalid.</td></tr>
+                <tr><td>Possible Match</td><td>More than one credit may match.</td><td>Pause and investigate.</td></tr>
+                <tr><td>Reversed</td><td>Previously matched funding no longer qualifies.</td><td>Pause; the prior authorization is invalid.</td></tr>
                 <tr><td>Awaiting Authorization</td><td>A plan exists but is not authorized.</td><td>Review every plan line.</td></tr>
-                <tr><td>Partial</td><td>Some payouts completed and others did not.</td><td>Do not retry; reconcile and escalate.</td></tr>
-                <tr><td>Blocked</td><td>Execution cannot safely continue.</td><td>Stop and escalate.</td></tr>
+                <tr><td>Partial</td><td>Some payouts completed and others did not.</td><td>Reconcile the existing requests and ask for support.</td></tr>
+                <tr><td>Blocked</td><td>Execution cannot safely continue.</td><td>Pause and contact the administrator.</td></tr>
                 <tr><td>Reconciled</td><td>All submitted payouts have final confirmed results.</td><td>Export evidence and close.</td></tr>
               </tbody>
             </table>
@@ -192,13 +203,14 @@
         </section>
 
         <section id="problems" data-guide-section data-search="problem error failure support retry slow missing stale unavailable">
-          <p class="eyebrow">Stop safely</p>
-          <h2>If something goes wrong</h2>
+          <p class="eyebrow">Support</p>
+          <h2>Pause safely and share the useful details</h2>
+          <p>An error or unclear result does not need to be solved at the broker desk. Preserve the case as it is and send a short support note.</p>
           <ol>
-            <li>Do not retry an authorization, execution, or submitted transfer.</li>
+            <li>Pause without retrying an authorization, execution, or submitted transfer.</li>
             <li>Write down the time, case reference, screen title, status, and the plain-language error.</li>
             <li>Do not include passwords, MFA codes, recovery codes, cookies, tokens, full account identifiers, balances, or package contents.</li>
-            <li>Leave the case unchanged.</li>
+            <li>Leave the case unchanged so the administrator can review the same record.</li>
             <li>Contact the named administrator through the approved support channel.</li>
           </ol>
           <div class="report-template">
@@ -213,33 +225,40 @@ Action taken: Stopped without retrying</pre>
         </section>
 
         <section id="security" data-guide-section data-search="safety security secret password code screenshot live production rules">
-          <p class="eyebrow">Always applies</p>
-          <h2>Safety rules</h2>
+          <p class="eyebrow">Good case handling</p>
+          <h2>Protect the client, your account, and the case record</h2>
+          <p>These boundaries keep the broker review reliable and preserve a clear audit history.</p>
           <ul class="check-list">
             <li>Use Sandbox identities and low-value test amounts only.</li>
-            <li>Never use investor banking credentials.</li>
-            <li>Never treat an uploaded package as proof that funds arrived.</li>
-            <li>Never create a counterparty from uploaded instructions.</li>
-            <li>Never share passwords, MFA or recovery codes, tokens, cookies, or secret files.</li>
-            <li>Never change a case to make a warning disappear.</li>
-            <li>Never retry a payment with an unclear outcome.</li>
-            <li>Never use this application for live money.</li>
+            <li>Use only your own Sandbox credentials; do not use investor banking credentials.</li>
+            <li>Confirm incoming funds through provider observations, not through an uploaded package.</li>
+            <li>Use only an existing, verified Sandbox counterparty or owned account.</li>
+            <li>Keep passwords, MFA and recovery codes, tokens, cookies, and secret files private.</li>
+            <li>Resolve a warning with cited evidence or the appropriate case decision; do not change a case simply to remove the warning.</li>
+            <li>Reconcile a payment with an unclear outcome instead of retrying it.</li>
+            <li>Use this application only for Sandbox cases and test money.</li>
           </ul>
         </section>
 
-        <section id="glossary" data-guide-section data-search="glossary definition case claim evidence amendment finding observation plan reconcile sandbox">
-          <p class="eyebrow">Plain language</p>
-          <h2>Glossary</h2>
+        <section id="glossary" data-guide-section data-search="glossary definition broker review case claim evidence amendment finding hard block beneficiary counterparty provider observation matched receipt funding plan digest reconcile signed bundle sandbox">
+          <p class="eyebrow">Broker terminology in plain language</p>
+          <h2>Broker glossary</h2>
           <dl>
+            <dt>Broker review</dt><dd>Your documented professional review of the submitted claims, findings, and supporting evidence.</dd>
             <dt>Case</dt><dd>The complete review record for one funding request.</dd>
             <dt>Claim</dt><dd>Something the sender says is true. A claim is not proof.</dd>
             <dt>Evidence</dt><dd>A cited record used to support or correct a claim.</dd>
             <dt>Finding</dt><dd>A problem, warning, or passed check produced during review.</dd>
+            <dt>Hard block</dt><dd>A concern that must be cleared with evidence or lead to rejection. It cannot be accepted as risk.</dd>
             <dt>Amendment</dt><dd>A dated correction that leaves the original claim visible.</dd>
+            <dt>Beneficiary</dt><dd>The person or organization intended to receive a payout.</dd>
+            <dt>Counterparty</dt><dd>A payment recipient already verified in Revolut Sandbox.</dd>
             <dt>Provider observation</dt><dd>Transaction information independently read from Revolut Sandbox.</dd>
-            <dt>Funding plan</dt><dd>The exact list of payouts, fees, reserve, and refund tied to one matched receipt.</dd>
+            <dt>Matched receipt</dt><dd>Exactly one provider credit that matches the expected account, currency, amount, and reference.</dd>
+            <dt>Funding plan</dt><dd>The exact list of customer payouts, broker fee, provider fees, reserve, and refund tied to one matched receipt.</dd>
             <dt>Digest</dt><dd>A short fingerprint used to prove the plan did not change.</dd>
             <dt>Reconcile</dt><dd>Ask the provider for the latest result and compare it with the case record.</dd>
+            <dt>Signed evidence bundle</dt><dd>The downloadable case history retained after reconciliation and closeout.</dd>
             <dt>Sandbox</dt><dd>A test environment. Its funds and identities are not real.</dd>
           </dl>
         </section>

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <meta name="description" content="High-level visual map of the brokered-funding case workflow in Revolut Sandbox." />
+    <title>Broker Workflow Map · Revolut Sandbox</title>
+    <link rel="stylesheet" href="./help.css" />
+    <script src="./workflow.js" defer></script>
+  </head>
+  <body class="workflow-body">
+    <a class="skip-link" href="#main">Skip to workflow map</a>
+    <header class="environment">REVOLUT SANDBOX · NO LIVE DATA</header>
+
+    <main id="main" class="workflow-shell">
+      <div class="workflow-topbar">
+        <a class="back-link" href="./">← Back to the broker guide</a>
+        <button id="print-workflow" class="print-button" type="button">Print workflow map</button>
+      </div>
+
+      <p class="eyebrow">Broker desk reference</p>
+      <h1 class="workflow-title">Funding case workflow map</h1>
+      <p class="workflow-lead">Use this visual overview to see how a case moves from a submitted package to a documented broker decision, controlled execution, and closeout. Open the full broker guide when you need step-by-step instructions.</p>
+
+      <section class="workflow-panel" aria-labelledby="whole-case">
+        <p class="eyebrow">End-to-end view</p>
+        <h2 id="whole-case">The typical brokered-funding case</h2>
+        <ol class="flow-line">
+          <li><strong>Receive and protect</strong><small>Upload the private ZIP to quarantine. The package starts a case record; it is not proof of funding.</small></li>
+          <li><strong>Review the case</strong><small>Check package health, compare claims and findings, and add cited amendments where needed.</small></li>
+          <li><strong>Confirm the receipt</strong><small>Match exactly one independent provider credit by account, currency, amount, and reference.</small></li>
+          <li><strong>Record the broker decision</strong><small>Approve, request information, or reject based on the evidence and required risk areas.</small></li>
+          <li><strong>Confirm and execute</strong><small>Balance payouts and fees to the receipt, authorize the exact plan, and execute once.</small></li>
+          <li><strong>Reconcile and close</strong><small>Confirm final provider results, close the case, and retain the signed evidence bundle.</small></li>
+        </ol>
+        <div class="flow-note"><strong>Each control has a different purpose.</strong> Package intake, funding match, broker approval, plan authorization, and execution are separate checkpoints. Completing one does not complete the next.</div>
+      </section>
+
+      <section class="workflow-panel" aria-labelledby="decision-path">
+        <p class="eyebrow">Decision view</p>
+        <h2 id="decision-path">How the broker decision branches</h2>
+        <p>Start with the evidence, required risk areas, and funding status. Then choose the outcome that fits the case now.</p>
+        <div class="decision-map">
+          <div class="map-node"><strong>Review complete</strong>Claims, findings, amendments, and funding receipt are current.</div>
+          <div class="map-arrow" aria-hidden="true">→</div>
+          <div class="map-node decision"><strong>Broker decision</strong>Do the required risk areas pass, is Funding Matched, and is the purpose understood?</div>
+          <div class="map-arrow" aria-hidden="true">→</div>
+          <div class="map-node"><strong>Record the outcome</strong>Add a short factual reason that another reviewer can follow.</div>
+        </div>
+        <div class="branch-grid">
+          <div class="map-node proceed">
+            <span class="branch-label">Yes</span>
+            <strong>Approve</strong>
+            Continue to the exact funding plan. Approval does not itself authorize a payout.
+          </div>
+          <div class="map-node pause">
+            <span class="branch-label">Not yet</span>
+            <strong>Request information</strong>
+            Obtain specific evidence, add a cited amendment, and review the updated findings.
+          </div>
+          <div class="map-node stop">
+            <span class="branch-label">Cannot proceed</span>
+            <strong>Reject</strong>
+            Close the review when the request is unacceptable or the concern cannot be safely resolved.
+          </div>
+        </div>
+        <div class="legend" aria-label="Workflow color key">
+          <span><i class="go"></i>Continue</span>
+          <span><i class="wait"></i>Pause and resolve</span>
+          <span><i class="halt"></i>Do not proceed</span>
+        </div>
+      </section>
+
+      <section class="workflow-panel" aria-labelledby="execution-path">
+        <p class="eyebrow">Execution and closeout</p>
+        <h2 id="execution-path">What happens after approval</h2>
+        <div class="decision-map">
+          <div class="map-node proceed"><strong>Approved case</strong>Funding is Matched and the current risk review passes.</div>
+          <div class="map-arrow" aria-hidden="true">→</div>
+          <div class="map-node decision"><strong>Exact funding plan</strong>Customer payouts + broker fee + provider fees + reserve/refund = matched receipt.</div>
+          <div class="map-arrow" aria-hidden="true">→</div>
+          <div class="map-node proceed"><strong>Authorize, execute, reconcile</strong>Confirm the same plan at each checkpoint and retain the final evidence.</div>
+        </div>
+        <div class="branch-grid">
+          <div class="map-node proceed">
+            <span class="branch-label">All payouts completed</span>
+            <strong>Reconcile and close</strong>
+            Confirm final provider results and download the signed evidence bundle.
+          </div>
+          <div class="map-node pause">
+            <span class="branch-label">Pending or unclear</span>
+            <strong>Reconcile the existing request</strong>
+            Wait for the provider result. Do not select Execute again.
+          </div>
+          <div class="map-node stop">
+            <span class="branch-label">Partial or blocked</span>
+            <strong>Pause and contact support</strong>
+            Preserve the case and share the time, case reference, screen, status, and plain-language error.
+          </div>
+        </div>
+      </section>
+
+      <section class="workflow-panel" aria-labelledby="responsibilities">
+        <p class="eyebrow">Roles at a glance</p>
+        <h2 id="responsibilities">The application assists; the broker decides</h2>
+        <div class="responsibility-grid">
+          <div class="responsibility-card">
+            <h3>The application helps you</h3>
+            <ul>
+              <li>Hold packages in quarantine while safety checks run.</li>
+              <li>Organize submitted claims, machine findings, and evidence.</li>
+              <li>Read provider observations and calculate the funding plan.</li>
+              <li>Preserve plan versions, approvals, and the audit history.</li>
+            </ul>
+          </div>
+          <div class="responsibility-card">
+            <h3>The broker is responsible for</h3>
+            <ul>
+              <li>Assessing the submitted claims and supporting evidence.</li>
+              <li>Clearing hard blocks with evidence or rejecting the case.</li>
+              <li>Recording the appropriate case outcome and factual reason.</li>
+              <li>Confirming the exact funding plan before authorization.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <p class="workflow-footer">High-level broker reference · Use the broker guide for complete instructions and status definitions.</p>
+    </main>
+  </body>
+</html>

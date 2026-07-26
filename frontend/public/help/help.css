@@ -14,6 +14,8 @@ body { margin: 0; }
 .sidebar { position: sticky; top: 35px; align-self: start; height: calc(100vh - 35px); overflow-y: auto; padding: 28px 22px; border-right: 1px solid #dce5e0; background: #fff; }
 .brand h1 { margin: 0 0 8px; font-size: 1.75rem; letter-spacing: -.04em; }
 .brand p { color: #65736c; }
+.companion-link { display: inline-flex; margin-top: 4px; color: #17643f; font-size: .85rem; font-weight: 800; text-decoration: none; }
+.companion-link:hover { text-decoration: underline; }
 .eyebrow { margin: 0 0 5px; color: #4d6a5b; font-size: .7rem; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
 .search-label { display: block; margin-top: 24px; font-size: .8rem; font-weight: 800; }
 input[type="search"] { width: 100%; min-height: 42px; margin-top: 7px; padding: 0 11px; border: 1px solid #bfcfc7; border-radius: 9px; font: inherit; }
@@ -51,12 +53,69 @@ dt { font-weight: 850; }
 dd { margin: 0; color: #4e5d55; }
 mark { padding: 0 2px; color: inherit; background: #ffed9a; }
 .no-results { text-align: center; }
+
+/* Broker workflow map */
+.workflow-body { background: #eef4f0; }
+.workflow-shell { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 36px 0 72px; }
+.workflow-topbar { display: flex; gap: 16px; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.workflow-topbar .print-button { width: auto; margin-top: 0; padding-inline: 16px; }
+.back-link { color: #17643f; font-weight: 800; text-decoration: none; }
+.back-link:hover { text-decoration: underline; }
+.workflow-title { margin: 0; font-size: clamp(2rem, 5vw, 3.4rem); letter-spacing: -.055em; }
+.workflow-lead { max-width: 780px; margin: 12px 0 28px; color: #4e5d55; font-size: 1.08rem; line-height: 1.65; }
+.workflow-panel { margin-bottom: 22px; padding: 28px; border: 1px solid #d3e0d9; border-radius: 18px; background: #fff; box-shadow: 0 10px 28px rgb(30 55 44 / 6%); }
+.workflow-panel h2 { font-size: clamp(1.35rem, 2.6vw, 1.85rem); }
+.workflow-panel > p { color: #56665e; }
+.flow-line { display: grid; grid-template-columns: repeat(6, minmax(130px, 1fr)); gap: 24px; margin: 26px 0 6px; padding: 0; counter-reset: broker-stage; list-style: none; }
+.flow-line li { position: relative; min-height: 188px; margin: 0; padding: 18px 16px 16px; border: 2px solid #bfd4c8; border-radius: 14px; background: #f7faf8; counter-increment: broker-stage; }
+.flow-line li::before { content: counter(broker-stage); display: grid; place-items: center; width: 30px; height: 30px; margin-bottom: 12px; border-radius: 50%; color: #fff; background: #2d7250; font-size: .82rem; font-weight: 900; }
+.flow-line li:not(:last-child)::after { content: "→"; position: absolute; top: 78px; right: -23px; width: 20px; color: #799789; font-size: 1.55rem; font-weight: 900; text-align: center; }
+.flow-line strong { display: block; margin-bottom: 7px; color: #193c2c; line-height: 1.25; }
+.flow-line small { display: block; color: #5c6c64; font-size: .84rem; line-height: 1.5; }
+.flow-note { margin-top: 20px; padding: 13px 15px; border-left: 5px solid #d39a32; border-radius: 8px; background: #fff4d9; line-height: 1.55; }
+.decision-map { display: grid; grid-template-columns: 1fr 54px 1.15fr 54px 1fr; gap: 10px; align-items: center; margin-top: 24px; }
+.map-node { padding: 18px; border: 2px solid #bfd4c8; border-radius: 14px; background: #f7faf8; text-align: center; }
+.map-node strong { display: block; margin-bottom: 7px; }
+.map-node.decision { border-color: #d6b05e; background: #fff8e8; }
+.map-node.proceed { border-color: #78b895; background: #eaf7ef; }
+.map-node.pause { border-color: #e0bd73; background: #fff6de; }
+.map-node.stop { border-color: #d99595; background: #fceeee; }
+.map-arrow { color: #799789; font-size: 1.75rem; font-weight: 900; text-align: center; }
+.branch-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 14px; }
+.branch-grid .map-node { text-align: left; }
+.branch-label { display: inline-block; margin-bottom: 7px; color: #4d6a5b; font-size: .7rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
+.responsibility-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px; }
+.responsibility-card { padding: 20px; border-radius: 14px; background: #f5f8f6; }
+.responsibility-card h3 { margin: 0 0 10px; color: #193c2c; }
+.responsibility-card ul { margin-bottom: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 20px; color: #56665e; font-size: .88rem; }
+.legend span { display: inline-flex; gap: 7px; align-items: center; }
+.legend i { width: 12px; height: 12px; border-radius: 50%; }
+.legend .go { background: #55a879; }
+.legend .wait { background: #d7a746; }
+.legend .halt { background: #ca6868; }
+.workflow-footer { color: #65736c; font-size: .86rem; text-align: center; }
+
+@media (max-width: 1100px) and (min-width: 801px) {
+  .flow-line { grid-template-columns: repeat(3, 1fr); }
+  .flow-line li { min-height: 160px; }
+  .flow-line li::after { display: none; }
+}
+
 @media (max-width: 800px) {
   .layout { display: block; }
   .sidebar { position: static; height: auto; border-right: 0; border-bottom: 1px solid #dce5e0; }
   nav { grid-template-columns: repeat(2, 1fr); }
   main { width: min(100% - 24px, 860px); padding-top: 20px; }
   section { padding: 22px; }
+  .workflow-shell { width: min(100% - 24px, 700px); padding-top: 22px; }
+  .workflow-panel { padding: 22px; }
+  .flow-line { grid-template-columns: 1fr; gap: 34px; }
+  .flow-line li { min-height: 0; }
+  .flow-line li:not(:last-child)::after { content: "↓"; top: auto; right: 50%; bottom: -31px; transform: translateX(50%); }
+  .decision-map { grid-template-columns: 1fr; }
+  .map-arrow { transform: rotate(90deg); }
+  .branch-grid, .responsibility-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 480px) {
   nav, dl { grid-template-columns: 1fr; }
@@ -67,4 +126,11 @@ mark { padding: 0 2px; color: inherit; background: #ffed9a; }
   .layout { display: block; }
   main { width: 100%; padding: 0; }
   section { break-inside: avoid; border: 0; box-shadow: none; }
+  .workflow-body { background: #fff; }
+  .workflow-shell { width: 100%; padding: 0; }
+  .workflow-topbar { display: none; }
+  .workflow-panel { break-inside: avoid; box-shadow: none; }
+  .flow-line { grid-template-columns: repeat(3, 1fr); }
+  .flow-line li { min-height: 150px; }
+  .flow-line li::after { display: none; }
 }
