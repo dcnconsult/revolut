@@ -75,6 +75,18 @@ code { padding: 2px 5px; border-radius: 5px; background: #eef2f0; }
 .workflow-steps li { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 9px; color: #44534b; background: #f2f7f4; font-size: .8rem; }
 .workflow-steps span { display: grid; place-items: center; width: 22px; height: 22px; flex: 0 0 22px; border-radius: 50%; color: white; background: #42765c; font-weight: 800; }
 .upload-row { grid-template-columns: 1fr auto; align-items: end; padding: 17px; border-radius: 12px; background: #f6faf8; }
+.case-runner { margin-top: 22px; padding: 22px; border: 1px solid #b9d7c7; border-radius: 14px; background: #fbfefc; }
+.case-runner h3 { margin: 0 0 8px; font-size: 1.08rem; }
+.case-status-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 18px 0; }
+.case-status-strip span { display: grid; gap: 4px; padding: 12px; border-radius: 9px; background: #edf5f1; }
+.case-status-strip small { color: #68756f; font-size: .72rem; font-weight: 750; text-transform: uppercase; }
+.sandbox-walkthrough-note { padding: 13px 15px; border-left: 4px solid #d0a321; border-radius: 8px; color: #51420f; background: #fff7d8; }
+.case-runner details { margin: 14px 0; padding: 12px 14px; border-radius: 9px; background: #f2f5f3; }
+.case-runner summary { cursor: pointer; font-weight: 750; }
+.case-runner details li { margin: 7px 0; }
+.runner-step { margin-top: 18px; padding: 18px; border: 1px solid #d8e6de; border-radius: 12px; background: white; }
+.runner-step.complete { border-color: #a9d6bd; background: #effaf4; }
+.reauth-form { grid-template-columns: 1fr 1fr auto; align-items: end; }
 .section-intro { margin-top: 30px; }
 td small { display: block; margin-top: 5px; color: #718078; }
 .pill.intake_hold, .pill.quarantined, .pill.information_required, .pill.exception { color: #8a2323; background: #fae4e4; }
@@ -82,8 +94,9 @@ td small { display: block; margin-top: 5px; color: #718078; }
 @media (max-width: 850px) {
   .status-grid { grid-template-columns: repeat(2, 1fr); }
   .two-column { grid-template-columns: 1fr; }
-  .prepare-form { grid-template-columns: 1fr; }
+  .prepare-form, .reauth-form { grid-template-columns: 1fr; }
   .workflow-steps { grid-template-columns: repeat(2, 1fr); }
+  .case-status-strip { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 560px) {
   main { width: min(100% - 20px, 1180px); padding-top: 24px; }

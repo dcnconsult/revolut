@@ -155,6 +155,91 @@ describe('brokered funding case workflow', () => {
     }
   });
 
+  it('turns an unusable upload into an explicit Sandbox-only walkthrough and completes it', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'case-walkthrough-'));
+    const store = new SQLiteCaseStore(':memory:');
+    const provider = mockProvider();
+    let simulated: {
+      accountId: string;
+      amount: number;
+      currency: string;
+      reference: string;
+    } | undefined;
+    provider.simulateTopUp = vi.fn(async input => {
+      simulated = input;
+      return {
+        id: '33333333-3333-4333-8333-333333333333',
+        state: 'completed'
+      };
+    });
+    provider.listTransactions = vi.fn(async () => simulated ? [{
+      id: '33333333-3333-4333-8333-333333333333',
+      state: 'completed',
+      type: 'topup',
+      reference: simulated.reference,
+      legs: [{
+        account_id: simulated.accountId,
+        amount: simulated.amount.toFixed(2),
+        currency: simulated.currency
+      }]
+    }] : []);
+    const service = new BrokeredFundingCaseService(
+      store,
+      new EncryptedEvidenceStore(directory, randomBytes(32)),
+      new CleanTestScanner(),
+      provider,
+      limits,
+      {}
+    );
+    try {
+      const submitted = service.submit(Buffer.from('this is not a ZIP archive'), 'walkthrough-invalid-upload');
+      let record = await service.waitForProcessing(submitted.case.id);
+      expect(record.caseStatus).toBe('INTAKE_HOLD');
+      expect(record.riskFindings.at(-1)?.code).toBe('PACKAGE_VALIDATION_FAILED');
+
+      record = await service.prepareSandboxWalkthrough(record.id, {
+        sourceAccountId: '11111111-1111-4111-8111-111111111111',
+        amountMinor: 500,
+        currency: 'USD'
+      }, 'admin');
+      expect(record.caseStatus).toBe('AWAITING_BROKER');
+      expect(record.fundingExpectation).toMatchObject({
+        amountMinor: 500,
+        currency: 'USD',
+        destinationAccountId: '11111111-1111-4111-8111-111111111111'
+      });
+      expect(record.riskFindings.filter(item => item.hardBlock && !item.resolvedAt).map(item => item.code))
+        .toEqual(['INCOMING_SETTLEMENT_UNOBSERVED']);
+
+      record = await service.refreshFunding(record.id, 'admin', true);
+      expect(record.fundingStatus).toBe('MATCHED');
+      record = service.decide(record.id, {
+        outcome: 'APPROVE',
+        reason: 'Explicit Sandbox walkthrough approved.'
+      }, 'admin');
+      const receipt = record.providerObservations[0]!;
+      const plan = service.createPlan(record.id, {
+        receiptObservationId: receipt.id,
+        allocations: [allocation('CUSTOMER_PAYOUT', 500, 'OWNED_ACCOUNT_TRANSFER', {
+          targetAccountId: '22222222-2222-4222-8222-222222222222'
+        })]
+      }, 'admin');
+      service.authorizePlan(record.id, plan.version, 'admin');
+      record = await service.executePlan(record.id, plan.version, 'admin');
+      expect(record.executionStatus).toBe('RECONCILING');
+      record = await service.reconcile(record.id, 'admin');
+      expect(record).toMatchObject({
+        caseStatus: 'CLOSED',
+        executionStatus: 'RECONCILED'
+      });
+      expect(service.list().find(item => item.id === record.id)?.nextAction)
+        .toBe('Export and retain the signed evidence bundle.');
+    } finally {
+      store.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it('rejects duplicate JSON properties and leaves scanner outages quarantined', async () => {
     expect(() => strictJsonParse('{"amount":1,"amount":2}')).toThrow('Duplicate JSON property');
     const directory = await mkdtemp(join(tmpdir(), 'case-scanner-'));

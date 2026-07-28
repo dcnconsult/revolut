@@ -46,6 +46,7 @@ Always complete these steps in order:
 | Respond to an error | [Error and outage guide](docs/ERROR_MONITORING_AND_OUTAGE_ROADMAP.md) |
 | Restore a backup | [Backup restore drill](docs/CASE_BACKUP_RESTORE.md) |
 | Set up or deploy the server | [Administrator deployment guide](docs/DIGITALOCEAN_DEPLOYMENT.md) |
+| Plan SSH, VPN, HTTPS, or mutual-TLS access | [Remote connection options](docs/REMOTE_CONNECTION_OPTIONS.md) |
 
 ## Non-negotiable safety boundaries
 

@@ -256,6 +256,47 @@ interface CaseSummary {
   nextAction: string;
 }
 
+interface CaseRiskFinding {
+  code: string;
+  message: string;
+  neededNext: string;
+  hardBlock: boolean;
+  resolvedAt?: string;
+}
+
+interface CaseFundingExpectation {
+  amountMinor: number;
+  currency: string;
+  exponent: number;
+  reference: string;
+  destinationAccountId: string;
+  investorName: string;
+}
+
+interface CaseProviderObservation extends CaseFundingExpectation {
+  id: string;
+  accountId: string;
+  direction: 'CREDIT' | 'DEBIT';
+  state: string;
+}
+
+interface CasePlan {
+  version: number;
+  digest: string;
+  status: string;
+}
+
+interface CaseRecord {
+  id: string;
+  caseStatus: string;
+  fundingStatus: string;
+  executionStatus: string;
+  riskFindings: CaseRiskFinding[];
+  fundingExpectation?: CaseFundingExpectation;
+  providerObservations: CaseProviderObservation[];
+  plans: CasePlan[];
+}
+
 function CaseWorkflow({
   session,
   notify
@@ -266,10 +307,37 @@ function CaseWorkflow({
   const [cases, setCases] = useState<CaseSummary[]>([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [selectedCase, setSelectedCase] = useState<CaseRecord>();
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const load = useCallback(() => api<CaseSummary[]>('/v1/cases?limit=50')
     .then(setCases)
     .catch(caught => setError(caught instanceof Error ? caught.message : 'Case inbox could not be loaded.')), []);
   useEffect(() => { void load(); }, [load]);
+
+  async function openCase(caseId: string) {
+    setBusy(true);
+    setError('');
+    try {
+      const [record, ownedAccounts] = await Promise.all([
+        api<CaseRecord>(`/v1/cases/${caseId}`),
+        session.role === 'admin' ? api<Account[]>('/v1/sandbox/accounts') : Promise.resolve([])
+      ]);
+      setSelectedCase(record);
+      setAccounts(ownedAccounts);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Case details could not be loaded.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function refreshSelected(message: string) {
+    if (!selectedCase) return;
+    const record = await api<CaseRecord>(`/v1/cases/${selectedCase.id}`);
+    setSelectedCase(record);
+    await load();
+    await notify(message);
+  }
 
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -319,7 +387,7 @@ function CaseWorkflow({
     {cases.length === 0
       ? <p className="muted">No brokered-funding cases have been received.</p>
       : <div className="table-wrap"><table><thead><tr>
-          <th>Case</th><th>Case review</th><th>Funds</th><th>Execution</th><th>Risk</th><th>What is needed next</th>
+          <th>Case</th><th>Case review</th><th>Funds</th><th>Execution</th><th>Risk</th><th>What is needed next</th><th>Action</th>
         </tr></thead><tbody>{cases.map(item => <tr key={item.id}>
           <td><code>{item.id.slice(0, 8)}</code><small>{formatDate(item.updatedAt)}</small></td>
           <td><span className={`pill ${item.caseStatus.toLowerCase()}`}>{plainAction(item.caseStatus)}</span></td>
@@ -327,7 +395,306 @@ function CaseWorkflow({
           <td>{plainAction(item.executionStatus)}</td>
           <td>{plainAction(item.overallRisk)} · {item.hardBlockCount} block{item.hardBlockCount === 1 ? '' : 's'}</td>
           <td className="message-cell">{item.nextAction}</td>
+          <td><button className="button ghost" disabled={busy} onClick={() => void openCase(item.id)}>Open case</button></td>
         </tr>)}</tbody></table></div>}
+    {selectedCase && <SandboxCaseRunner
+      record={selectedCase}
+      accounts={accounts}
+      session={session}
+      onClose={() => setSelectedCase(undefined)}
+      onChanged={refreshSelected}
+    />}
+  </section>;
+}
+
+function SandboxCaseRunner({
+  record,
+  accounts,
+  session,
+  onClose,
+  onChanged
+}: {
+  record: CaseRecord;
+  accounts: Account[];
+  session: Session;
+  onClose: () => void;
+  onChanged: (message: string) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const activeFindings = record.riskFindings.filter(item => !item.resolvedAt);
+  const latestPlan = record.plans.at(-1);
+  const expectation = record.fundingExpectation;
+  const matchedObservation = expectation
+    ? record.providerObservations.find(item =>
+        item.direction === 'CREDIT' &&
+        item.accountId === expectation.destinationAccountId &&
+        item.currency === expectation.currency &&
+        item.amountMinor === expectation.amountMinor &&
+        item.reference === expectation.reference &&
+        item.state.toUpperCase() === 'COMPLETED'
+      )
+    : undefined;
+  const sourceCandidates = accounts.filter(source =>
+    source.state === 'active' &&
+    accounts.some(target =>
+      target.id !== source.id && target.state === 'active' && target.currency === source.currency
+    )
+  );
+  const payoutTargets = expectation
+    ? accounts.filter(account =>
+        account.id !== expectation.destinationAccountId &&
+        account.state === 'active' &&
+        account.currency === expectation.currency
+      )
+    : [];
+
+  async function perform(action: () => Promise<unknown>, message: string) {
+    setBusy(true);
+    setError('');
+    try {
+      await action();
+      await onChanged(message);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'The Sandbox case action failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function prepareWalkthrough(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const source = sourceCandidates.find(item => item.id === data.get('sourceAccountId'));
+    const amountMinor = Math.round(Number(data.get('amount')) * 100);
+    if (!source || !Number.isSafeInteger(amountMinor) || amountMinor < 1) {
+      setError('Select a Sandbox account and enter a positive amount.');
+      return;
+    }
+    await perform(
+      () => api(`/v1/cases/${record.id}/sandbox-walkthrough`, {
+        method: 'POST',
+        body: JSON.stringify({
+          sourceAccountId: source.id,
+          amountMinor,
+          currency: source.currency
+        })
+      }, session.csrfToken),
+      'Sandbox-only case inputs prepared. The uploaded package remains in the audit trail but is not relied upon.'
+    );
+  }
+
+  async function createPlan(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!expectation || !matchedObservation) return;
+    const data = new FormData(event.currentTarget);
+    const target = payoutTargets.find(item => item.id === data.get('targetAccountId'));
+    if (!target) {
+      setError('Select an eligible owned Sandbox payout account.');
+      return;
+    }
+    await perform(
+      () => api(`/v1/cases/${record.id}/plans`, {
+        method: 'POST',
+        body: JSON.stringify({
+          receiptObservationId: matchedObservation.id,
+          allocations: [{
+            kind: 'CUSTOMER_PAYOUT',
+            amountMinor: expectation.amountMinor,
+            currency: expectation.currency,
+            exponent: expectation.exponent,
+            beneficiaryName: target.name,
+            reference: `SANDBOX PAYOUT ${record.id.slice(0, 8).toUpperCase()}`,
+            method: 'OWNED_ACCOUNT_TRANSFER',
+            sourceAccountId: expectation.destinationAccountId,
+            targetAccountId: target.id
+          }]
+        })
+      }, session.csrfToken),
+      'Exactly balanced Sandbox transfer plan created.'
+    );
+  }
+
+  async function authorize(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!latestPlan) return;
+    const data = new FormData(event.currentTarget);
+    await perform(
+      () => api(`/v1/cases/${record.id}/plans/${latestPlan.version}/authorize`, {
+        method: 'POST',
+        body: JSON.stringify({
+          password: data.get('password'),
+          totp: data.get('totp'),
+          confirmation: `AUTHORIZE ${record.id} PLAN ${latestPlan.version} ${latestPlan.digest.slice(0, 12)}`
+        })
+      }, session.csrfToken),
+      'Sandbox plan authorized.'
+    );
+  }
+
+  async function execute(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!latestPlan) return;
+    const data = new FormData(event.currentTarget);
+    await perform(
+      () => api(`/v1/cases/${record.id}/plans/${latestPlan.version}/execute`, {
+        method: 'POST',
+        body: JSON.stringify({
+          password: data.get('password'),
+          totp: data.get('totp'),
+          confirmation: `EXECUTE ${record.id} PLAN ${latestPlan.version} ${latestPlan.digest.slice(0, 12)}`
+        })
+      }, session.csrfToken),
+      'Sandbox transfer submitted. Reconcile the provider result next.'
+    );
+  }
+
+  return <section className="case-runner" aria-label="Selected funding case">
+    <div className="panel-heading">
+      <div>
+        <p className="eyebrow">Selected case</p>
+        <h2><code>{record.id.slice(0, 8)}</code> · Sandbox walkthrough</h2>
+      </div>
+      <div className="actions">
+        <button className="button ghost" disabled={busy} onClick={() => void onChanged('Case status refreshed.')}>Refresh</button>
+        <button className="button ghost" onClick={onClose}>Close</button>
+      </div>
+    </div>
+    <div className="case-status-strip">
+      <span><small>Case</small><strong>{plainAction(record.caseStatus)}</strong></span>
+      <span><small>Funds</small><strong>{plainAction(record.fundingStatus)}</strong></span>
+      <span><small>Execution</small><strong>{plainAction(record.executionStatus)}</strong></span>
+      <span><small>Open findings</small><strong>{activeFindings.length}</strong></span>
+    </div>
+    <p className="sandbox-walkthrough-note">
+      <strong>Sandbox only.</strong> This walkthrough uses synthetic instructions and owned Revolut Sandbox accounts.
+      It never treats the uploaded package as cleared evidence and cannot reach live funds.
+    </p>
+    {activeFindings.length > 0 && <details>
+      <summary>View current findings</summary>
+      <ul>{activeFindings.map(item =>
+        <li key={item.code}><strong>{plainAction(item.code)}:</strong> {item.message}</li>
+      )}</ul>
+    </details>}
+    {error && <p className="error" role="alert">{error}</p>}
+
+    {session.role !== 'admin'
+      ? <p className="muted">Read-only accounts can review this case but cannot advance it.</p>
+      : record.caseStatus === 'CLOSED'
+        ? <div className="runner-step complete">
+            <p className="eyebrow">Complete</p>
+            <h3>Sandbox case reconciled and closed</h3>
+            <p>Download the signed evidence bundle for the complete case history.</p>
+            <a className="button help-link" href={`/v1/cases/${record.id}/evidence`} download>Download signed evidence</a>
+          </div>
+        : !expectation
+          ? <div className="runner-step">
+              <p className="eyebrow">Step 1</p>
+              <h3>Prepare synthetic Sandbox case inputs</h3>
+              <p>This explicitly bypasses unusable uploaded claims for this Sandbox case only.</p>
+              <form className="prepare-form" onSubmit={prepareWalkthrough}>
+                <label>Incoming Sandbox account
+                  <select name="sourceAccountId" required>
+                    {sourceCandidates.map(account =>
+                      <option key={account.id} value={account.id}>{account.name} · {account.currency}</option>
+                    )}
+                  </select>
+                </label>
+                <label>Test amount
+                  <input name="amount" type="number" min="0.01" step="0.01" defaultValue="10.00" required />
+                </label>
+                <button className="button primary" disabled={busy || sourceCandidates.length === 0}>
+                  Prepare walkthrough
+                </button>
+              </form>
+              {sourceCandidates.length === 0 &&
+                <p className="error">Two active owned Sandbox accounts in the same currency are required.</p>}
+            </div>
+          : record.fundingStatus !== 'MATCHED'
+            ? <div className="runner-step">
+                <p className="eyebrow">Step 2</p>
+                <h3>Create and match the Sandbox test credit</h3>
+                <p>
+                  Create a clearly labelled {money(expectation.amountMinor, expectation.currency)} Sandbox credit,
+                  then match it to this case.
+                </p>
+                <button className="button primary" disabled={busy} onClick={() => void perform(
+                  () => api(`/v1/cases/${record.id}/funding-observations/refresh`, {
+                    method: 'POST',
+                    body: JSON.stringify({ simulate: true })
+                  }, session.csrfToken),
+                  'Sandbox test credit created and matched.'
+                )}>Create and match test credit</button>
+              </div>
+            : record.caseStatus !== 'APPROVED'
+              ? <div className="runner-step">
+                  <p className="eyebrow">Step 3</p>
+                  <h3>Record the Sandbox broker decision</h3>
+                  <p>Funding is matched and the synthetic walkthrough findings are clear.</p>
+                  <button className="button primary" disabled={busy} onClick={() => void perform(
+                    () => api(`/v1/cases/${record.id}/decisions`, {
+                      method: 'POST',
+                      body: JSON.stringify({
+                        outcome: 'APPROVE',
+                        reason: 'Approved for explicit Sandbox-only workflow simulation after matched synthetic funding.'
+                      })
+                    }, session.csrfToken),
+                    'Sandbox broker decision recorded.'
+                  )}>Approve Sandbox case</button>
+                </div>
+              : !latestPlan
+                ? <div className="runner-step">
+                    <p className="eyebrow">Step 4</p>
+                    <h3>Create the exact owned-account transfer plan</h3>
+                    <p>The payout uses the complete matched receipt; there are no fees or retained funds in this walkthrough.</p>
+                    <form className="prepare-form" onSubmit={createPlan}>
+                      <label>Destination Sandbox account
+                        <select name="targetAccountId" required>
+                          {payoutTargets.map(account =>
+                            <option key={account.id} value={account.id}>{account.name} · {account.currency}</option>
+                          )}
+                        </select>
+                      </label>
+                      <label>Exact payout
+                        <input value={money(expectation.amountMinor, expectation.currency)} readOnly />
+                      </label>
+                      <button className="button primary" disabled={busy || payoutTargets.length === 0}>Create plan</button>
+                    </form>
+                  </div>
+                : latestPlan.status === 'AWAITING_AUTHORIZATION'
+                  ? <div className="runner-step">
+                      <p className="eyebrow">Step 5</p>
+                      <h3>Authorize the exact Sandbox plan</h3>
+                      <p>Plan {latestPlan.version} · digest <code>{latestPlan.digest.slice(0, 12)}</code></p>
+                      <form key="authorize-plan" className="reauth-form" onSubmit={authorize}>
+                        <label>Administrator password<input name="password" type="password" autoComplete="current-password" required /></label>
+                        <label>Fresh authenticator code<input name="totp" inputMode="numeric" autoComplete="one-time-code" required /></label>
+                        <button className="button primary" disabled={busy}>Authorize plan</button>
+                      </form>
+                    </div>
+                  : latestPlan.status === 'AUTHORIZED' && record.executionStatus === 'AUTHORIZED'
+                    ? <div className="runner-step">
+                        <p className="eyebrow">Step 6</p>
+                        <h3>Execute the authorized Sandbox transfer</h3>
+                        <p>Re-enter your administrator password and a fresh authenticator code.</p>
+                        <form key="execute-plan" className="reauth-form" onSubmit={execute}>
+                          <label>Administrator password<input name="password" type="password" autoComplete="current-password" required /></label>
+                          <label>Fresh authenticator code<input name="totp" inputMode="numeric" autoComplete="one-time-code" required /></label>
+                          <button className="button primary" disabled={busy}>Execute once</button>
+                        </form>
+                      </div>
+                    : <div className="runner-step">
+                        <p className="eyebrow">Step 7</p>
+                        <h3>Reconcile and close</h3>
+                        <p>Refresh the submitted payout from Revolut Sandbox and close the case when it is complete.</p>
+                        <div className="actions">
+                          <button className="button primary" disabled={busy} onClick={() => void perform(
+                            () => api(`/v1/cases/${record.id}/reconcile`, { method: 'POST' }, session.csrfToken),
+                            'Sandbox provider results reconciled.'
+                          )}>Reconcile Sandbox result</button>
+                          <a className="button help-link" href={`/v1/cases/${record.id}/evidence`} download>Download current evidence</a>
+                        </div>
+                      </div>}
   </section>;
 }
 

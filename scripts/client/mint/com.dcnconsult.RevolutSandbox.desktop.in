@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Revolut Sandbox
+GenericName=Private Sandbox Application
+Comment=Open the private Revolut Sandbox operator application
+Exec=@LAUNCHER_PATH@
+Icon=network-vpn
+Terminal=false
+Categories=Network;Office;
+StartupNotify=true

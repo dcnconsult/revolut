@@ -1,10 +1,12 @@
 import Fastify from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import multipart from '@fastify/multipart';
 import sensible from '@fastify/sensible';
 import staticFiles from '@fastify/static';
 import { existsSync } from 'node:fs';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomBytes, randomUUID } from 'node:crypto';
+import type { Server as HttpsServer } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MockBankingProvider } from './adapters/mock-provider.js';
@@ -38,6 +40,10 @@ import {
   CleanTestScanner,
   type MalwareScanner
 } from './cases/malware-scanner.js';
+import {
+  buildServerConnectionOptions,
+  shouldUseSecureCookies
+} from './config/server-connection.js';
 
 interface BuildAppOptions {
   mode?: typeof env.REVOLUT_MODE;
@@ -56,13 +62,30 @@ export function buildApp(options: BuildAppOptions = {}) {
   if (mode === 'production') {
     throw new Error('Production mode is not implemented. Use REVOLUT_MODE=mock or REVOLUT_MODE=sandbox.');
   }
-  const app = Fastify({
+  const connection = buildServerConnectionOptions({
+    transport: env.APP_TRANSPORT,
+    trustProxy: env.APP_TRUST_PROXY,
+    ...(env.APP_TLS_CERT_PATH ? { tlsCertificatePath: env.APP_TLS_CERT_PATH } : {}),
+    ...(env.APP_TLS_KEY_PATH ? { tlsPrivateKeyPath: env.APP_TLS_KEY_PATH } : {}),
+    ...(env.APP_TLS_CLIENT_CA_PATH ? { tlsClientCaPath: env.APP_TLS_CLIENT_CA_PATH } : {}),
+    ...(env.APP_TLS_KEY_PASSPHRASE_PATH
+      ? { tlsPrivateKeyPassphrasePath: env.APP_TLS_KEY_PASSPHRASE_PATH }
+      : {})
+  });
+  const fastifyOptions = {
     logger: {
       level: env.LOG_LEVEL,
       redact: ['req.headers.authorization', 'req.headers.x-api-key', 'req.headers.cookie']
     },
-    bodyLimit: Math.max(env.ISO20022_MAX_FILE_BYTES, env.CASE_ZIP_MAX_BYTES) + 200_000
-  });
+    bodyLimit: Math.max(env.ISO20022_MAX_FILE_BYTES, env.CASE_ZIP_MAX_BYTES) + 200_000,
+    trustProxy: connection.trustProxy
+  };
+  const app: FastifyInstance = connection.https
+    ? Fastify<HttpsServer>({
+        ...fastifyOptions,
+        https: connection.https
+      }) as unknown as FastifyInstance
+    : Fastify(fastifyOptions);
   app.register(sensible);
   app.register(multipart, {
     limits: {
@@ -111,7 +134,11 @@ export function buildApp(options: BuildAppOptions = {}) {
       (env.NODE_ENV === 'test'
         ? createTestCredentials()
         : loadOperatorCredentials(env.OPERATOR_AUTH_CONFIG_PATH));
-    const auth = new OperatorAuth(credentials, store, env.OPERATOR_COOKIE_SECURE);
+    const auth = new OperatorAuth(
+      credentials,
+      store,
+      shouldUseSecureCookies(env.OPERATOR_COOKIE_SECURE, env.APP_TRANSPORT)
+    );
     const evidenceRoot = options.caseEvidenceRoot ??
       (env.NODE_ENV === 'test'
         ? join(tmpdir(), `revolut-case-evidence-${randomUUID()}`)
@@ -138,7 +165,8 @@ export function buildApp(options: BuildAppOptions = {}) {
         maximumCompressionRatio: env.CASE_ZIP_MAX_COMPRESSION_RATIO
       },
       options.trustedSourceKeys ?? env.trustedSourceKeys,
-      options.evidenceSigningKeyPem ?? (env.CASE_EVIDENCE_SIGNING_KEY_PEM || undefined)
+      options.evidenceSigningKeyPem ?? (env.CASE_EVIDENCE_SIGNING_KEY_PEM || undefined),
+      env.SANDBOX_INTERNAL_TRANSFER_MAX_MINOR
     );
     caseService.resumePendingJobs();
     app.addHook('onClose', async () => {
@@ -184,7 +212,7 @@ function loadOrCreateEvidenceKey(root: string, configured: string) {
 
 if (process.env.NODE_ENV !== 'test') {
   const app = buildApp();
-  app.listen({ port: env.PORT, host: '0.0.0.0' }).catch(error => {
+  app.listen({ port: env.PORT, host: env.APP_HOST }).catch(error => {
     app.log.error(error);
     process.exit(1);
   });

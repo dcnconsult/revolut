@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Revolut Sandbox Setup or Repair
+GenericName=Private Sandbox Application
+Comment=Install or repair the private Revolut Sandbox connection
+Exec=/usr/lib/revolut-sandbox/first-run.sh
+Icon=network-vpn
+Terminal=false
+Categories=Network;Settings;
+StartupNotify=true

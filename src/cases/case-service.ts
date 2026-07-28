@@ -12,7 +12,7 @@ import { inspectArchive, type ArchiveLimits } from './archive-reader.js';
 import { canonicalJson, sha256 } from './canonical.js';
 import type { SQLiteCaseStore } from './case-store.js';
 import type { EncryptedEvidenceStore } from './evidence-store.js';
-import { analyzePackage } from './intake.js';
+import { analyzePackage, finding } from './intake.js';
 import type { MalwareScanner } from './malware-scanner.js';
 import type {
   BrokeredCase,
@@ -44,6 +44,12 @@ interface PlanInput {
   allocations: Omit<FundingAllocation, 'id'>[];
 }
 
+interface SandboxWalkthroughInput {
+  sourceAccountId: string;
+  amountMinor: number;
+  currency: string;
+}
+
 export class BrokeredFundingCaseService {
   private readonly processing = new Map<string, Promise<void>>();
   private readonly execution = new Map<string, Promise<BrokeredCase>>();
@@ -57,7 +63,8 @@ export class BrokeredFundingCaseService {
     private readonly provider: SandboxInternalTransferClient,
     private readonly limits: ArchiveLimits,
     private readonly trustedSourceKeys: Record<string, string>,
-    signingKeyPem?: string
+    signingKeyPem?: string,
+    private readonly maximumSandboxWalkthroughAmountMinor = 1_000
   ) {
     if (signingKeyPem) {
       const privateKey = signingKeyPem;
@@ -156,6 +163,118 @@ export class BrokeredFundingCaseService {
 
   get(caseId: string) {
     return structuredClone(this.mustGet(caseId));
+  }
+
+  async prepareSandboxWalkthrough(
+    caseId: string,
+    input: SandboxWalkthroughInput,
+    actor: string
+  ) {
+    const record = this.mustGet(caseId);
+    if (['REJECTED', 'CLOSED'].includes(record.caseStatus)) {
+      throw new Error(`A Sandbox walkthrough cannot be prepared from ${record.caseStatus}.`);
+    }
+    if (record.plans.length > 0 || record.executionStatus !== 'NOT_PLANNED') {
+      throw new Error('A Sandbox walkthrough cannot replace an existing funding plan.');
+    }
+    if (record.fundingExpectation) {
+      throw new Error('This case already has a usable incoming funding expectation.');
+    }
+    if (record.riskFindings.some(item =>
+      !item.resolvedAt && ['MALWARE_DETECTED', 'MALWARE_SCANNER_UNAVAILABLE'].includes(item.code)
+    )) {
+      throw new Error('A package with an unresolved malware safety finding cannot be used for a walkthrough.');
+    }
+    if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor < 1 ||
+        input.amountMinor > this.maximumSandboxWalkthroughAmountMinor) {
+      throw new Error(
+        `Sandbox walkthrough amount must be between 1 and ${this.maximumSandboxWalkthroughAmountMinor} minor units.`
+      );
+    }
+    if (!/^[A-Z]{3}$/.test(input.currency)) {
+      throw new Error('Sandbox walkthrough currency must be a three-letter uppercase code.');
+    }
+    const accounts = await this.provider.getAccounts();
+    const source = accounts.find(account => account.id === input.sourceAccountId);
+    if (!source || source.state !== 'active') {
+      throw new Error('Select an active owned Revolut Sandbox account.');
+    }
+    if (source.currency !== input.currency) {
+      throw new Error('Selected Sandbox account currency does not match the walkthrough currency.');
+    }
+    if (!accounts.some(account =>
+      account.id !== source.id && account.state === 'active' && account.currency === source.currency
+    )) {
+      throw new Error('A second active owned Sandbox account in the same currency is required.');
+    }
+
+    const now = new Date().toISOString();
+    const reference = `SANDBOX CASE ${record.id.slice(0, 8).toUpperCase()}`;
+    const expectation = {
+      amountMinor: input.amountMinor,
+      currency: input.currency,
+      exponent: 2,
+      reference,
+      destinationAccountId: source.id,
+      investorName: 'Synthetic Sandbox Investor'
+    };
+    const amendmentId = randomUUID();
+    const evidenceRef = `SANDBOX-WALKTHROUGH-${record.id}`;
+    const correctedClaims: Array<{ path: string; value: unknown }> = [
+      ['expectedIncomingCredit', expectation],
+      ['purpose', 'Explicit Sandbox-only end-to-end workflow simulation']
+    ].map(([path, value]) => ({ path: String(path), value }));
+    const resolvedCodes = [...new Set(
+      record.riskFindings.filter(item => !item.resolvedAt).map(item => item.code)
+    )];
+
+    resolveFindings(record, resolvedCodes, amendmentId);
+    record.amendments.push({
+      id: amendmentId,
+      version: record.amendments.length + 1,
+      reason: 'Operator explicitly prepared a Sandbox-only walkthrough; uploaded claims are not relied upon.',
+      source: 'Operator-selected owned Revolut Sandbox account',
+      claims: correctedClaims,
+      resolvesFindingCodes: resolvedCodes,
+      evidenceRefs: [evidenceRef],
+      actor,
+      recordedAt: now
+    });
+    for (const claim of correctedClaims) {
+      const previous = [...record.claims].reverse().find(item => item.path === claim.path);
+      record.claims.push({
+        id: randomUUID(),
+        version: record.claims.filter(item => item.path === claim.path).length + 1,
+        path: claim.path,
+        value: structuredClone(claim.value),
+        source: 'BROKER_AMENDMENT',
+        evidenceRefs: [evidenceRef],
+        recordedAt: now,
+        ...(previous ? { supersedesClaimId: previous.id } : {})
+      });
+    }
+    record.fundingExpectation = expectation;
+    record.riskFindings.push(finding('INCOMING_SETTLEMENT_UNOBSERVED', [evidenceRef]));
+    delete record.decision;
+    record.caseStatus = 'AWAITING_BROKER';
+    record.fundingStatus = 'AWAITING_FUNDS';
+    record.executionStatus = 'NOT_PLANNED';
+    record.updatedAt = now;
+    invalidateAuthorization(record, 'Sandbox walkthrough prepared');
+    appendRiskSnapshot(record);
+    this.store.save(record, {
+      eventType: 'SANDBOX_WALKTHROUGH_PREPARED',
+      actor,
+      reason: 'Explicit Sandbox-only case inputs replaced unusable uploaded transaction claims.',
+      evidenceRefs: [evidenceRef],
+      payload: {
+        sandboxOnly: true,
+        amountMinor: input.amountMinor,
+        currency: input.currency,
+        resolvedFindingCodes: resolvedCodes
+      }
+    });
+    return structuredClone(record);
   }
 
   addAmendment(caseId: string, input: AmendmentInput, actor: string) {
@@ -811,6 +930,8 @@ export class BrokeredFundingCaseService {
 }
 
 function nextAction(record: BrokeredCase) {
+  if (record.caseStatus === 'CLOSED') return 'Export and retain the signed evidence bundle.';
+  if (record.caseStatus === 'REJECTED') return 'Retain the rejection decision and supporting evidence.';
   if (record.caseStatus === 'QUARANTINED') return 'Wait for private malware scanning.';
   if (record.caseStatus === 'INTAKE_HOLD' || record.caseStatus === 'INFORMATION_REQUIRED') {
     return record.riskFindings.find(item => item.hardBlock && !item.resolvedAt)?.neededNext ??
