@@ -16,6 +16,12 @@ interface ReauthenticatedBody {
   confirmation?: string;
 }
 
+interface SandboxWalkthroughBody {
+  sourceAccountId?: string;
+  amountMinor?: number;
+  currency?: string;
+}
+
 export async function caseRoutes(
   app: FastifyInstance,
   service: BrokeredFundingCaseService,
@@ -66,6 +72,23 @@ export async function caseRoutes(
       return reply.notFound(publicMessage(error, 'Case not found.'));
     }
   });
+
+  app.post<{ Params: CaseParams; Body: SandboxWalkthroughBody }>(
+    '/cases/:id/sandbox-walkthrough',
+    async (request, reply) => {
+      const principal = auth.require(request, reply, ['admin'], true);
+      if (!principal) return;
+      try {
+        return await service.prepareSandboxWalkthrough(request.params.id, {
+          sourceAccountId: request.body?.sourceAccountId ?? '',
+          amountMinor: request.body?.amountMinor ?? 0,
+          currency: request.body?.currency ?? ''
+        }, principal.username);
+      } catch (error) {
+        return reply.badRequest(publicMessage(error, 'Sandbox walkthrough could not be prepared.'));
+      }
+    }
+  );
 
   app.post<{ Params: CaseParams; Body: Parameters<BrokeredFundingCaseService['addAmendment']>[1] }>(
     '/cases/:id/amendments',

@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+
+# Single-instance SSH reconnect loop used by the graphical launcher.
+
+set -u
+umask 077
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/revolut-sandbox"
+SSH_CONFIG="$HOME/.config/revolut-sandbox/ssh_config"
+PID_FILE="$STATE_DIR/direct-tunnel.pid"
+TUNNEL_LOG="$STATE_DIR/tunnel.log"
+LOCK_FILE="${XDG_RUNTIME_DIR:-$STATE_DIR}/revolut-sandbox-tunnel.lock"
+
+mkdir -p -- "$STATE_DIR"
+chmod 700 "$STATE_DIR"
+touch "$TUNNEL_LOG"
+chmod 600 "$TUNNEL_LOG"
+
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  exit 0
+fi
+
+cleanup() {
+  if [[ -r "$PID_FILE" ]] && grep -qx "$$" "$PID_FILE"; then
+    rm -f -- "$PID_FILE"
+  fi
+}
+trap cleanup EXIT INT TERM
+
+printf '%s\n' "$$" >"$PID_FILE"
+chmod 600 "$PID_FILE"
+
+while true; do
+  printf '%s connection-attempt\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >>"$TUNNEL_LOG"
+  @SSH_PATH@ -F "$SSH_CONFIG" -N -T revolut-sandbox-tunnel >>"$TUNNEL_LOG" 2>&1
+  tunnel_status="$?"
+  printf '%s connection-ended status=%s\n' \
+    "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+    "$tunnel_status" >>"$TUNNEL_LOG"
+  sleep 5
+done

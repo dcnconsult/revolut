@@ -4,6 +4,13 @@ import { z } from 'zod';
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
+  APP_HOST: z.string().min(1).default('0.0.0.0'),
+  APP_TRANSPORT: z.enum(['http', 'https', 'mtls']).default('http'),
+  APP_TRUST_PROXY: z.string().default(''),
+  APP_TLS_CERT_PATH: z.string().optional(),
+  APP_TLS_KEY_PATH: z.string().optional(),
+  APP_TLS_CLIENT_CA_PATH: z.string().optional(),
+  APP_TLS_KEY_PASSPHRASE_PATH: z.string().optional(),
   LOG_LEVEL: z.string().default('info'),
   REVOLUT_MODE: z.enum(['mock', 'sandbox', 'production']).default('mock'),
   REVOLUT_BASE_URL: z.string().url().default('https://sandbox-b2b.revolut.com/api/1.0'),

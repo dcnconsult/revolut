@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+
+# Daily, nontechnical launcher installed by install.sh.
+
+set -u
+umask 077
+
+HEALTH_URL="http://127.0.0.1:@LOCAL_PORT@/health"
+APPLICATION_URL="http://127.0.0.1:@LOCAL_PORT@/operator/"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/revolut-sandbox"
+LOG_FILE="$STATE_DIR/launcher.log"
+PENDING_MARKER="$STATE_DIR/pending-activation"
+DIRECT_TUNNEL="$HOME/.local/lib/revolut-sandbox/direct-tunnel.sh"
+TUNNEL_PID_FILE="$STATE_DIR/direct-tunnel.pid"
+
+mkdir -p -- "$STATE_DIR"
+chmod 700 "$STATE_DIR"
+
+record_status() {
+  printf '%s %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$1" >>"$LOG_FILE"
+  chmod 600 "$LOG_FILE"
+}
+
+show_error() {
+  local message="$1"
+  record_status "$2"
+
+  if command -v zenity >/dev/null 2>&1; then
+    zenity \
+      --error \
+      --title="Revolut Sandbox" \
+      --width=440 \
+      --text="$message" >/dev/null 2>&1
+  elif command -v notify-send >/dev/null 2>&1; then
+    notify-send --urgency=critical "Revolut Sandbox" "$message"
+  fi
+}
+
+health_is_safe_sandbox() {
+  local response="$1"
+  grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' <<<"$response" &&
+    grep -Eq '"mode"[[:space:]]*:[[:space:]]*"sandbox"' <<<"$response"
+}
+
+direct_tunnel_is_running() {
+  local tunnel_pid
+  [[ -r "$TUNNEL_PID_FILE" ]] || return 1
+  tunnel_pid="$(tr -cd '0-9' <"$TUNNEL_PID_FILE")"
+  [[ -n "$tunnel_pid" ]] || return 1
+  kill -0 "$tunnel_pid" >/dev/null 2>&1 || return 1
+  [[ -r "/proc/$tunnel_pid/cmdline" ]] || return 1
+  tr '\0' ' ' <"/proc/$tunnel_pid/cmdline" | grep -Fq "$DIRECT_TUNNEL"
+}
+
+if [[ ! -x "$DIRECT_TUNNEL" ]]; then
+  show_error \
+    "The secure connection needs repair. Open Revolut Sandbox Setup or Repair from the Mint application menu, then try this icon again." \
+    "tunnel-runner-missing"
+  exit 1
+fi
+
+if ! direct_tunnel_is_running; then
+  rm -f -- "$TUNNEL_PID_FILE"
+  nohup "$DIRECT_TUNNEL" >/dev/null 2>&1 &
+  for _runner_attempt in $(seq 1 10); do
+    if direct_tunnel_is_running; then
+      break
+    fi
+    sleep 0.2
+  done
+  if ! direct_tunnel_is_running; then
+    show_error \
+      "The secure connection could not start. Check that this computer is connected to the internet, then try the Revolut Sandbox icon again." \
+      "tunnel-start-failed"
+    exit 1
+  fi
+fi
+
+record_status "connection-requested"
+
+ATTEMPT_COUNT="30"
+if [[ -f "$PENDING_MARKER" ]]; then
+  ATTEMPT_COUNT="15"
+fi
+
+for _attempt in $(seq 1 "$ATTEMPT_COUNT"); do
+  HEALTH_RESPONSE="$(curl --fail --silent --show-error --max-time 2 "$HEALTH_URL" 2>/dev/null || true)"
+  if direct_tunnel_is_running &&
+    health_is_safe_sandbox "$HEALTH_RESPONSE"; then
+    rm -f -- "$PENDING_MARKER"
+    record_status "sandbox-ready"
+    nohup xdg-open "$APPLICATION_URL" >/dev/null 2>&1 &
+    exit 0
+  fi
+  sleep 1
+done
+
+if HEALTH_RESPONSE="$(curl --fail --silent --show-error --max-time 2 "$HEALTH_URL" 2>/dev/null)" &&
+  grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' <<<"$HEALTH_RESPONSE"; then
+  show_error \
+    "The connection reached an application that is not the approved Revolut Sandbox. Do not continue. Contact the administrator." \
+    "wrong-application-mode"
+else
+  if [[ -f "$PENDING_MARKER" ]]; then
+    show_error \
+      "This computer is waiting for access activation. Email only the Revolut-Sandbox-Public-Key.txt file from the Desktop to the administrator. After the administrator confirms activation, click this icon again." \
+      "activation-pending"
+  else
+    show_error \
+      "Revolut Sandbox could not be reached. Check the internet connection and try the icon once more. If it still does not open, contact the administrator; do not change any settings." \
+      "sandbox-unreachable"
+  fi
+fi
+
+exit 1

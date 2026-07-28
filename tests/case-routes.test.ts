@@ -6,7 +6,22 @@ import { buildApp } from '../src/server.js';
 import { legacyAssetDeclarationPackage } from './fixtures/legacy-package.js';
 
 const provider: SandboxInternalTransferClient = {
-  getAccounts: vi.fn(async () => []),
+  getAccounts: vi.fn(async () => [
+    {
+      id: '11111111-1111-4111-8111-111111111111',
+      name: 'USD source',
+      currency: 'USD',
+      balance: 100,
+      state: 'active'
+    },
+    {
+      id: '22222222-2222-4222-8222-222222222222',
+      name: 'USD target',
+      currency: 'USD',
+      balance: 0,
+      state: 'active'
+    }
+  ]),
   createInternalTransfer: vi.fn(),
   getTransaction: vi.fn(async id => ({ id, state: 'completed' })),
   listTransactions: vi.fn(async () => [])
@@ -107,6 +122,65 @@ describe('brokered funding case routes', () => {
       },
       payload: multipart.body
     })).statusCode).toBe(403);
+  });
+
+  it('allows an administrator to prepare an explicit Sandbox walkthrough for an unusable upload', async () => {
+    app = buildApp({ mode: 'sandbox', sandboxClient: provider, sandboxDatabasePath: ':memory:' });
+    const login = await app.inject({
+      method: 'POST',
+      url: '/v1/operator/session',
+      payload: { username: 'admin', password: 'admin-test-password' }
+    });
+    const setCookie = login.headers['set-cookie'];
+    const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(';')[0] ?? '';
+    const securityHeaders = {
+      cookie,
+      'x-csrf-token': login.json().csrfToken as string,
+      origin: 'http://localhost:80'
+    };
+    const multipart = multipartPayload(Buffer.from('not a ZIP archive'));
+    const submitted = await app.inject({
+      method: 'POST',
+      url: '/v1/cases/submissions',
+      headers: {
+        ...securityHeaders,
+        'x-submission-id': 'route-sandbox-walkthrough',
+        'content-type': multipart.contentType
+      },
+      payload: multipart.body
+    });
+    expect(submitted.statusCode).toBe(202);
+    const caseId = submitted.json().caseId as string;
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/v1/cases/${caseId}`,
+        headers: { cookie }
+      });
+      if (response.json().caseStatus !== 'QUARANTINED') break;
+      await delay(10);
+    }
+
+    const prepared = await app.inject({
+      method: 'POST',
+      url: `/v1/cases/${caseId}/sandbox-walkthrough`,
+      headers: securityHeaders,
+      payload: {
+        sourceAccountId: '11111111-1111-4111-8111-111111111111',
+        amountMinor: 500,
+        currency: 'USD'
+      }
+    });
+    expect(prepared.statusCode).toBe(200);
+    expect(prepared.json()).toMatchObject({
+      caseStatus: 'AWAITING_BROKER',
+      fundingStatus: 'AWAITING_FUNDS',
+      fundingExpectation: {
+        amountMinor: 500,
+        currency: 'USD',
+        destinationAccountId: '11111111-1111-4111-8111-111111111111'
+      }
+    });
   });
 });
 

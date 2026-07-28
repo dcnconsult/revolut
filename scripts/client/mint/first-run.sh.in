@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+
+# First launch from the personalized Debian package. The private key is created
+# on the Mint computer and is never included in the package or exported.
+
+set -u
+umask 077
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+DATA_DIR="$HOME/.local/share/revolut-sandbox"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/revolut-sandbox"
+IDENTITY_FILE="$DATA_DIR/tunnel_identity"
+PUBLIC_KEY_FILE="$IDENTITY_FILE.pub"
+INSTALLED_LAUNCHER="$HOME/.local/lib/revolut-sandbox/launch.sh"
+RUNTIME_VERSION="@PACKAGE_VERSION@"
+VERSION_FILE="$DATA_DIR/runtime-version"
+
+show_error() {
+  if command -v zenity >/dev/null 2>&1; then
+    zenity --error --title="Revolut Sandbox Setup" --width=460 --text="$1" >/dev/null 2>&1
+  elif command -v notify-send >/dev/null 2>&1; then
+    notify-send --urgency=critical "Revolut Sandbox Setup" "$1"
+  fi
+}
+
+if [[ -x "$INSTALLED_LAUNCHER" && -r "$VERSION_FILE" ]] &&
+  grep -qx "$RUNTIME_VERSION" "$VERSION_FILE"; then
+  exec "$INSTALLED_LAUNCHER"
+fi
+
+if [[ "${EUID}" -eq 0 ]]; then
+  show_error "Open Revolut Sandbox from the normal Mint desktop account, not as root."
+  exit 1
+fi
+
+for command_name in ssh-keygen zenity; do
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    show_error "Setup is missing a required Mint component. Reinstall the Revolut Sandbox package while connected to the internet."
+    exit 1
+  fi
+done
+
+install -d -m 700 "$DATA_DIR" "$STATE_DIR"
+
+IDENTITY_WAS_CREATED="no"
+if [[ ! -s "$IDENTITY_FILE" ]]; then
+  if ! ssh-keygen \
+    -q \
+    -t ed25519 \
+    -N "" \
+    -C "revolut-sandbox-mint" \
+    -f "$IDENTITY_FILE"; then
+    show_error "The secure access key could not be created. Contact the administrator; do not email any private files."
+    exit 1
+  fi
+  IDENTITY_WAS_CREATED="yes"
+fi
+
+chmod 600 "$IDENTITY_FILE"
+chmod 644 "$PUBLIC_KEY_FILE"
+
+INSTALL_ARGUMENTS=(
+  --host "@SERVER_HOST@" \
+  --ssh-port "@SSH_PORT@" \
+  --identity "$IDENTITY_FILE" \
+  --known-hosts "$SCRIPT_DIR/known_hosts" \
+  --skip-connection-test
+)
+if [[ -e "$HOME/.config/revolut-sandbox/ssh_config" ]]; then
+  INSTALL_ARGUMENTS+=(--replace)
+fi
+
+if ! "$SCRIPT_DIR/install.sh" "${INSTALL_ARGUMENTS[@]}"; then
+  show_error "The desktop launcher could not be installed. Contact the administrator and do not email any private files."
+  exit 1
+fi
+
+printf '%s\n' "$RUNTIME_VERSION" >"$VERSION_FILE"
+chmod 600 "$VERSION_FILE"
+
+if [[ "$IDENTITY_WAS_CREATED" != "yes" ]]; then
+  exec "$INSTALLED_LAUNCHER"
+fi
+
+if command -v xdg-user-dir >/dev/null 2>&1; then
+  DESKTOP_DIR="$(xdg-user-dir DESKTOP)"
+else
+  DESKTOP_DIR="$HOME/Desktop"
+fi
+if [[ -z "$DESKTOP_DIR" || ! -d "$DESKTOP_DIR" ]]; then
+  DESKTOP_DIR="$HOME"
+fi
+
+PUBLIC_EXPORT="$DESKTOP_DIR/Revolut-Sandbox-Public-Key.txt"
+install -m 644 "$PUBLIC_KEY_FILE" "$PUBLIC_EXPORT"
+touch "$STATE_DIR/pending-activation"
+chmod 600 "$STATE_DIR/pending-activation"
+
+zenity \
+  --info \
+  --title="Revolut Sandbox Setup" \
+  --width=520 \
+  --text="Step 1 is complete.\n\nAttach only the file named Revolut-Sandbox-Public-Key.txt to an email to the administrator.\n\nNever email tunnel_identity or any file described as a private key.\n\nAfter the administrator confirms activation, click Revolut Sandbox again." \
+  >/dev/null 2>&1
+
+if command -v xdg-open >/dev/null 2>&1; then
+  nohup xdg-open "$DESKTOP_DIR" >/dev/null 2>&1 &
+fi
+
+exit 0

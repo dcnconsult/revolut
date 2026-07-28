@@ -1,0 +1,11 @@
+[Unit]
+Description=Private SSH tunnel to Revolut Sandbox
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=@SSH_PATH@ -F %h/.config/revolut-sandbox/ssh_config -N -T revolut-sandbox-tunnel
+Restart=always
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
