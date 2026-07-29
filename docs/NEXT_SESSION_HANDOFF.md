@@ -8,7 +8,32 @@ record, not an operator procedure. Operators should use
 result, and “next work” statement against the repository and active Sandbox
 before acting. Later documentation and code take priority over this snapshot.
 
-Prepared July 24, 2026 for `dcnconsult/revolut`.
+Prepared July 28, 2026 for `dcnconsult/revolut`.
+
+## Pilot implementation update
+
+The code-related first slice from
+[the real-case Sandbox pilot plan](REAL_CASE_SANDBOX_PILOT_PLAN.md) is present
+in the local working tree and has passed local verification. It is **not**
+evidence of a deployment, permission to upload a client ZIP, or permission to
+perform an external Sandbox test.
+
+The local slice now provides:
+
+- separate limits for the small direct connection test and the broker case;
+- a configurable Sandbox-only case ceiling, initially up to USD 1 billion for
+  USD cases;
+- a safe file list and useful questions for a clean but unfamiliar ZIP;
+- broker review, recorded corrections, request-information, and rejection
+  controls;
+- exact full-confirmed-amount Sandbox funding and plan checks; and
+- one-time execution, redacted result capture, durable reconciliation, and no
+  automatic resubmission after an unclear result.
+
+Before any external pilot activity, obtain the named sensitive-data and
+retention approval, choose approved representative case material, and obtain
+the broker/owner authorization for the specific Sandbox test. No such client
+ZIP intake or external high-value Sandbox action is part of this handoff.
 
 ## Current baseline
 
@@ -21,7 +46,8 @@ Prepared July 24, 2026 for `dcnconsult/revolut`.
   infrastructure inventory
 - API and operator console bind only to `127.0.0.1:3000`
 - Public inbound access is restricted to SSH
-- Revolut mode is Sandbox using the real Revolut Business Sandbox; no live data
+- Revolut mode is Sandbox using the real Revolut Business Sandbox; no live
+  money. Client case information remains subject to the named pilot approval.
 - Production mode remains intentionally blocked by the application and activation script
 
 Access the browser console through an SSH tunnel and open:
@@ -44,7 +70,8 @@ There is one administrator and one read-only user. Preserve the existing credent
 - Consolidated redacted error capture, categorization, fingerprint aggregation, occurrence counts, and recovery tracking
 - Monitoring endpoints and browser/text-console error reports
 - Eight-second provider timeout
-- At most two bounded retries for rate limits, provider 5xx responses, and network faults
+- Bounded retries for safe read-only and token calls only; broker-case funding
+  and payouts are never automatically submitted again
 - Capped `Retry-After`, coalesced token refresh, and stable provider request IDs
 - Daily health monitor at 06:17 UTC
 - Weekly prepared-only remote smoke test Sunday at 04:47 UTC
@@ -52,32 +79,33 @@ There is one administrator and one read-only user. Preserve the existing credent
 - Critical monitoring failures use the existing GitHub `[Ops]` issue channel
 - Object storage is deliberately deferred
 
-The baseline passed linting, type checks, 51 tests across 14 files, build, two Chromium end-to-end tests, dependency audit, Docker build, shell syntax checks, documentation link checks, and secret scanning.
+The current pilot slice passed local linting, type checks, tests, and build
+verification. Re-run the safe checks below before merging or deploying because
+the pilot work remains an uncommitted local addition.
 
 ## Recommended next work
 
-Start with Phase A: a Sandbox-only email alert adapter.
+The implementation does not grant pilot authority. Do not begin client-case
+intake merely because the code is present.
 
-Requirements:
+1. Obtain written approval for the pilot's sensitive-data handling, retention,
+   access, and approved private channel.
+2. Select the initial representative client case ZIPs only after that approval.
+   Keep originals out of Git, chat, email, and test fixtures unless they have
+   been explicitly redacted and approved for that purpose.
+3. Obtain the named broker/owner authorization before each external Sandbox
+   test. Work from the full confirmed case amount; if Sandbox limits, rejects,
+   or leaves it unclear, retain and reconcile that first result rather than
+   lowering or repeating it.
+4. Record the file layout, broker questions, Sandbox response, elapsed time,
+   and support needed for each case. Use those observations to choose the first
+   recurring-format adapter and exception report.
 
-- Provider-neutral adapter with email disabled by default
-- SQLite outbox with delivery status and audit history
-- Root-managed credentials; never store or print secrets in the repository
-- Redacted alert payloads only
-- Alert on first critical occurrence, escalation, and recovery
-- Fingerprint-based deduplication and cooldown
-- Explicit recipient allowlist
-- Sandbox delivery test path
-- Preserve GitHub issues as a second alert channel
-- No change to `REVOLUT_MODE`, firewall rules, PAY scope, or transfer submission behavior
-
-After that, remaining roadmap items are:
-
-1. Production Gate 2 read-only probe, only when the real Production account, certificate, client ID, and READ consent are available. Use separate root-managed secrets and allow only `GET /accounts`; never treat Production as a Sandbox URL toggle.
-2. Safe transaction-intent queue, deferred until a transactional production database and dual approval exist. It must never auto-release after an outage and must reconcile ambiguous provider results before retrying.
-3. Encrypted off-Droplet object-storage backups and a formal restore drill before live operation.
-4. Webhooks v2 only after authenticated HTTPS ingress exists; keep the operator UI and API loopback-only.
-5. Broader production controls: PostgreSQL or equivalent durable idempotency, approvals, source ownership, reconciliation, and required payment-format validation.
+After the first governed cases, the next engineering work is recurring-format
+adapters, exception/pilot reporting, and approved retention/deletion
+automation. Email alerting, Production readiness, object-storage backups, and
+webhooks remain separate deferred roadmaps; they are not prerequisites to the
+private Sandbox pilot unless their own approvals say otherwise.
 
 See:
 
@@ -91,10 +119,14 @@ See:
 ## Safety boundaries
 
 - Do not switch `REVOLUT_MODE` to Production.
-- Do not enable PAY or access live account data.
+- Do not enable PAY, access Production account data, or use live money.
+- Do not upload a client case ZIP until the named pilot data-handling and
+  retention approval is confirmed.
 - Do not expose port 3000 or change the firewall.
 - Do not read, echo, commit, or transmit credentials.
 - Automated checks may prepare a `0.01` Sandbox transfer record but must never submit it.
+- Never automatically repeat a broker-case funding or payout request. Keep an
+  unclear result and reconcile it before any later case decision.
 - Do not activate an email sender or transaction queue before its gates and tests pass.
 - Keep Sandbox and Production accounts, certificates, consent, and secrets completely separate.
 - Use the PR and CI workflow for code changes; verify before merge and deployment.
@@ -127,4 +159,4 @@ Relevant GitHub Actions workflows:
 
 ## Ready-to-paste kickoff prompt
 
-> Continue `dcnconsult/revolut` from `docs/NEXT_SESSION_HANDOFF.md`. Start with Phase A: implement the Sandbox-only email alert adapter and SQLite outbox for consolidated operational errors. Keep email disabled by default; use redacted payloads, root-managed credentials, deduplication/cooldown, first-critical/escalation/recovery events, and delivery audit. Add tests and documentation. Do not change `REVOLUT_MODE`, firewall exposure, PAY scope, or transfer submission behavior. Review the repository and verify the active release before making changes.
+> Continue `dcnconsult/revolut` from `docs/NEXT_SESSION_HANDOFF.md` and `docs/REAL_CASE_SANDBOX_PILOT_PLAN.md`. The local broker-case implementation slice is complete, but no client ZIP, deployment, or external high-value Sandbox action has been authorized by this handoff. First verify the named data-handling/retention approval and the active release. Then prepare the initial approved representative ZIP intake and broker/owner authorization workflow. Keep the direct connection-test limit separate from the full broker-confirmed Sandbox case amount. Never lower or automatically repeat an unclear case funding or payout request; preserve and reconcile the existing result. Do not change Production mode, firewall exposure, PAY scope, or live-money behavior.

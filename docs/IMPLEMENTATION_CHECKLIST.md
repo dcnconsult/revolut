@@ -11,6 +11,47 @@ application, “diagnostic integration work” is unfinished maintainer work, an
 > scaffold. The brokered-funding case workflow is the current operator path.
 > Do not infer that an unchecked item permits a manual workaround.
 
+## Brokered Sandbox pilot — current local implementation
+
+This section records the July 28 local implementation slice for the private
+broker workflow. It does not authorize a deployment, a client ZIP upload, a
+Sandbox action, or any use of live money.
+
+### Implemented and locally verified
+
+- Separate the small direct owned-account connection-test limit from the
+  broker-case limit.
+- Configure a Sandbox-only case maximum, initially up to USD 1 billion for USD
+  cases, while retaining exact integer currency handling and boundary tests.
+- Accept a clean but unfamiliar ZIP for protected diagnostic review, with a
+  safe file list and clear questions instead of a generic technical failure.
+- Let the broker record independently checked case details, a dated correction,
+  a request for information, or a rejection without editing technical data.
+- Create and match the full confirmed Sandbox test credit, build an exact plan,
+  and keep high-value Sandbox limits or rejections as useful case findings.
+- Require separate authorisation and one-time execution, preserve redacted
+  results, prevent automatic repeat submissions, and reconcile an unclear
+  existing result before any later case decision.
+- Restrict case data and exports by role and keep original-case access under
+  administrator control.
+
+### External gates still open
+
+- Written approval for client-case data handling, retention, access, and the
+  approved private transfer channel.
+- Named broker/owner authorization for each external Sandbox case test.
+- Initial approved representative ZIPs and an observed Sandbox response at each
+  permitted amount step.
+- Retention, deletion, exception reporting, and format-adapter decisions based
+  on observed pilot cases rather than assumptions.
+
+### Next learning cycle
+
+Run the first governed cases only after the external gates above are complete.
+Record the sender format, broker questions, final Sandbox result, and support
+time. Use the approved, redacted learning set to prioritize the first recurring
+file-format adapter and pilot report.
+
 ## +1 implemented in the scaffold
 
 1. Manual and ISO 20022 inputs normalize into one payment domain model.

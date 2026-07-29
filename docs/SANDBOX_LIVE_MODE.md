@@ -4,7 +4,10 @@
 use [Use the Sandbox operator console](SANDBOX_OPERATOR_CONSOLE.md).
 
 The word “connected” means the application can reach Revolut's test service.
-It does not mean Production, live customer data, or live money.
+It does not mean Production or live money. Representative client case
+information may be used in this private Sandbox pilot only after the named
+data-handling and retention approval; that approval does not turn the service
+into Production.
 
 `REVOLUT_MODE=sandbox` connects the loopback-only application API to the real
 Revolut Business Sandbox. It never selects the Production Business API.
@@ -19,10 +22,25 @@ Revolut Business Sandbox. It never selects the Production Business API.
 - Only transfers between two accounts owned by the same Sandbox business are
   supported.
 - Preparation does not move test funds. Submission is a separate request.
-- The default maximum is 1,000 minor units (`10.00`).
+- The default maximum of 1,000 minor units (`10.00`) applies only to the
+  **Direct owned-account transfer test** described by the endpoints below. It
+  is a small technical connection check.
+- A brokered Sandbox case has a separate limit in
+  `CASE_SANDBOX_MAXIMUMS_JSON` (initially up to USD 1 billion for USD cases).
+  It uses the full broker-confirmed test amount within that limit. A Sandbox
+  limit, rejection, or unclear result is kept in the case record; the amount
+  is not lowered or automatically submitted again.
 - Records and idempotency state are stored in a local SQLite database using
   WAL mode and JSON-validated record columns.
 - The application remains bound to `127.0.0.1:3000` on the Droplet.
+
+## Brokered Sandbox case path
+
+The endpoints in this document are for the separate direct connection test.
+They do not describe the normal broker case workflow. For a client case, use
+the browser workflow in [Work a Sandbox case](BROKERED_FUNDING_CASES.md).
+That workflow has its own case limit, matching Sandbox test credit, broker
+review, one-time execution, and reconciliation safeguards.
 
 ## Endpoints
 

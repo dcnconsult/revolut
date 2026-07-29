@@ -1,5 +1,6 @@
 import { randomUUID, verify } from 'node:crypto';
 import { canonicalJson, strictJsonParse } from './canonical.js';
+import { canonicalCurrencyExponent } from './currency.js';
 import type {
   BrokeredCase,
   CaseClaim,
@@ -30,6 +31,23 @@ interface V1Manifest {
   artifacts: ManifestArtifact[];
 }
 
+type PackageFormat = BrokeredCase['submissions'][number]['format'];
+
+interface PackageAnalysis {
+  format: PackageFormat;
+  submissionIdentity?: string;
+  findings: RiskFinding[];
+  claims: CaseClaim[];
+  fundingExpectation?: IncomingFundingExpectation;
+}
+
+class IntakeValidationError extends Error {
+  constructor(readonly code: string, message: string) {
+    super(message);
+    this.name = 'IntakeValidationError';
+  }
+}
+
 const findingDefinitions: Record<string, {
   dimension: RiskDimension;
   message: string;
@@ -37,6 +55,71 @@ const findingDefinitions: Record<string, {
   hardBlock?: boolean;
   severity?: RiskFinding['severity'];
 }> = {
+  ARCHIVE_NOT_ZIP: {
+    dimension: 'technical_integrity',
+    message: 'The uploaded file is not a ZIP archive.',
+    neededNext: 'Upload the original ZIP package without changing its extension or contents.'
+  },
+  ARCHIVE_STRUCTURE_INVALID: {
+    dimension: 'technical_integrity',
+    message: 'The ZIP archive structure could not be safely inspected.',
+    neededNext: 'Obtain a new, intact ZIP package from the sender.'
+  },
+  ARCHIVE_LIMIT_EXCEEDED: {
+    dimension: 'technical_integrity',
+    message: 'The ZIP exceeds a configured safety limit for size or entry count.',
+    neededNext: 'Request a safely sized package or agree an approved intake method before retrying.'
+  },
+  ARCHIVE_PATH_UNSAFE: {
+    dimension: 'technical_integrity',
+    message: 'The ZIP contains an unsafe path or link.',
+    neededNext: 'Reject this archive and obtain a clean replacement from the sender.'
+  },
+  ARCHIVE_DUPLICATE_PATH: {
+    dimension: 'technical_integrity',
+    message: 'The ZIP contains duplicate normalized artifact paths.',
+    neededNext: 'Request a package with one unambiguous copy of each artifact.'
+  },
+  ARCHIVE_COMPRESSION_RATIO_EXCEEDED: {
+    dimension: 'technical_integrity',
+    message: 'The ZIP contains content with an unsafe compression ratio.',
+    neededNext: 'Reject this archive and obtain a clean replacement from the sender.'
+  },
+  MANIFEST_MISSING: {
+    dimension: 'technical_integrity',
+    message: 'The package has no recognizable manifest.',
+    neededNext: 'Review the retained inventory, identify the package family, and request its field guide or a supported package.'
+  },
+  MANIFEST_PARSE_FAILED: {
+    dimension: 'technical_integrity',
+    message: 'The package manifest could not be read as valid JSON.',
+    neededNext: 'Request a readable manifest or review this package through the diagnostic compatibility path.'
+  },
+  MANIFEST_INVENTORY_MISMATCH: {
+    dimension: 'technical_integrity',
+    message: 'The declared manifest inventory does not exactly match the ZIP contents.',
+    neededNext: 'Provide a newly signed package whose manifest inventory matches every artifact.'
+  },
+  UNSUPPORTED_PACKAGE_PROFILE: {
+    dimension: 'technical_integrity',
+    message: 'The archive is safe to inspect but does not match a transaction-ready package profile.',
+    neededNext: 'Review the artifact inventory and record the package family before requesting information or promoting a repeatable adapter.'
+  },
+  UNSUPPORTED_ARTIFACT_TYPE: {
+    dimension: 'technical_integrity',
+    message: 'The archive contains an artifact type that the diagnostic profile does not interpret.',
+    neededNext: 'Review the retained inventory and request a supported representation if the artifact is material.'
+  },
+  ARTIFACT_PARSE_FAILED: {
+    dimension: 'technical_integrity',
+    message: 'A required known-package artifact could not be interpreted safely.',
+    neededNext: 'Request a readable replacement or review the package family before creating an adapter.'
+  },
+  REQUIRED_TRANSACTION_FIELD_NOT_FOUND: {
+    dimension: 'execution_readiness',
+    message: 'A required transaction field is absent or invalid.',
+    neededNext: 'Request the missing transaction information and confirm it with cited evidence.'
+  },
   MANIFEST_DECLARED_FILES_MISSING: {
     dimension: 'technical_integrity',
     message: 'The manifest declares files that are absent from the package.',
@@ -138,6 +221,56 @@ const findingDefinitions: Record<string, {
     dimension: 'source_authentication',
     message: 'The detached package signature is invalid or its key is not trusted.',
     neededNext: 'Obtain a new package signed by an enrolled source key.'
+  },
+  SANDBOX_CASE_AMOUNT_LIMIT_EXCEEDED: {
+    dimension: 'execution_readiness',
+    message: 'The declared Sandbox case amount exceeds the configured limit for its currency.',
+    neededNext: 'Record the full declared amount, then obtain an approved Sandbox limit change or document the provider limitation.'
+  },
+  SANDBOX_TOPUP_LIMIT_REACHED: {
+    dimension: 'incoming_settlement',
+    message: 'Revolut Sandbox did not accept the requested simulated funding amount.',
+    neededNext: 'Retain the provider response, document the Sandbox top-up limit, and do not reduce the amount silently.'
+  },
+  SANDBOX_BALANCE_INSUFFICIENT: {
+    dimension: 'execution_readiness',
+    message: 'The selected Sandbox account does not have the full confirmed balance.',
+    neededNext: 'Record the balance limitation and create or observe full-value Sandbox funding before another attempt.'
+  },
+  PROVIDER_HIGH_VALUE_REJECTED: {
+    dimension: 'execution_readiness',
+    message: 'The provider rejected the full confirmed Sandbox value.',
+    neededNext: 'Retain the provider response as a pilot finding; any amended amount requires a new plan and authorization.'
+  },
+  PROVIDER_AMOUNT_LIMIT_UNKNOWN: {
+    dimension: 'execution_readiness',
+    message: 'The provider response did not make an amount limit clear.',
+    neededNext: 'Reconcile the response and record the provider limitation before considering a separately documented amended test.'
+  },
+  PROVIDER_CURRENCY_LIMIT: {
+    dimension: 'execution_readiness',
+    message: 'The selected currency is not configured for this Sandbox case amount.',
+    neededNext: 'Confirm the currency-specific Sandbox limit before preparing a new case plan.'
+  },
+  PROVIDER_PENDING_BEYOND_TEST_WINDOW: {
+    dimension: 'execution_readiness',
+    message: 'The provider has not reached a final state within the pilot test window.',
+    neededNext: 'Reconcile the existing request; do not submit a replacement automatically.'
+  },
+  PROVIDER_RESPONSE_AMBIGUOUS: {
+    dimension: 'execution_readiness',
+    message: 'The provider response is ambiguous and the exact submission outcome is not known.',
+    neededNext: 'Reconcile the existing provider request before any replacement or amendment.'
+  },
+  PROVIDER_TRANSACTION_REVERSED: {
+    dimension: 'execution_readiness',
+    message: 'The provider reports that a Sandbox transaction was reversed.',
+    neededNext: 'Retain the reversal evidence, reconcile the case, and create a new plan only after review.'
+  },
+  PROVIDER_RECONCILIATION_MISMATCH: {
+    dimension: 'execution_readiness',
+    message: 'Provider reconciliation did not confirm the expected complete plan result.',
+    neededNext: 'Review every provider attempt and resolve the mismatch before a replacement plan is considered.'
   }
 };
 
@@ -160,38 +293,79 @@ export function finding(code: string, evidenceRefs: string[] = []): RiskFinding 
 export function analyzePackage(
   archive: InspectedArchive,
   trustedSourceKeys: Record<string, string>
-): {
-  format: BrokeredCase['submissions'][number]['format'];
-  submissionIdentity?: string;
-  findings: RiskFinding[];
-  claims: CaseClaim[];
-  fundingExpectation?: IncomingFundingExpectation;
-} {
+): PackageAnalysis {
+  // Metadata and content signatures are only interpreted after the archive scanner
+  // has produced a clean result.
   if (archive.scanner === 'UNAVAILABLE') {
-    return { format: detectLegacy(archive) ? 'legacy-asset-declaration' : 'brokered-funding/1.0', findings: [finding('MALWARE_SCANNER_UNAVAILABLE')], claims: [] };
+    return { format: 'generic-compatibility/1.0', findings: [finding('MALWARE_SCANNER_UNAVAILABLE')], claims: [] };
   }
   if (archive.scanner === 'INFECTED') {
-    return { format: detectLegacy(archive) ? 'legacy-asset-declaration' : 'brokered-funding/1.0', findings: [finding('MALWARE_DETECTED')], claims: [] };
+    return { format: 'generic-compatibility/1.0', findings: [finding('MALWARE_DETECTED')], claims: [] };
   }
-  return detectLegacy(archive)
-    ? analyzeLegacy(archive)
-    : analyzeV1(archive, trustedSourceKeys);
+
+  const profile = recognizeProfile(archive);
+  if (profile === 'legacy-asset-declaration') return safelyAnalyzeLegacy(archive);
+  if (profile === 'brokered-funding/1.0') return safelyAnalyzeV1(archive, trustedSourceKeys);
+  return analyzeGenericCompatibility(archive);
 }
 
-function detectLegacy(archive: InspectedArchive) {
+function recognizeProfile(archive: InspectedArchive): PackageFormat {
   const manifest = archive.entries.find(entry => entry.normalizedPath === 'manifest.json');
-  if (!manifest) return false;
-  const value = strictJsonParse(manifest.content.toString('utf8'));
-  return object(value).package === 'ETH_ASSET_DECLARATION';
+  if (!manifest) return 'generic-compatibility/1.0';
+  const manifestValue = parseJson(manifest);
+  if (!manifestValue) return 'generic-compatibility/1.0';
+  const manifestObject = object(manifestValue);
+  if (manifestObject.package === 'ETH_ASSET_DECLARATION') return 'legacy-asset-declaration';
+  if (manifestObject.format === 'brokered-funding/1.0') return 'brokered-funding/1.0';
+  return 'generic-compatibility/1.0';
 }
 
-function analyzeLegacy(archive: InspectedArchive) {
+function safelyAnalyzeLegacy(archive: InspectedArchive): PackageAnalysis {
+  try {
+    return analyzeLegacy(archive);
+  } catch (error) {
+    return failedKnownProfile('legacy-asset-declaration', archive, intakeFailureCode(error));
+  }
+}
+
+function safelyAnalyzeV1(
+  archive: InspectedArchive,
+  trustedSourceKeys: Record<string, string>
+): PackageAnalysis {
+  try {
+    return analyzeV1(archive, trustedSourceKeys);
+  } catch (error) {
+    return failedKnownProfile('brokered-funding/1.0', archive, intakeFailureCode(error));
+  }
+}
+
+function failedKnownProfile(format: PackageFormat, archive: InspectedArchive, code: string): PackageAnalysis {
+  const manifest = archive.entries.find(entry => entry.normalizedPath === 'manifest.json');
+  return {
+    format,
+    findings: [finding(code, [manifest?.sha256 ?? archive.packageSha256])],
+    claims: []
+  };
+}
+
+function analyzeGenericCompatibility(archive: InspectedArchive): PackageAnalysis {
+  const manifest = archive.entries.find(entry => entry.normalizedPath === 'manifest.json');
+  const unsupported = archive.entries.filter(entry => entry.mediaType === 'application/octet-stream');
+  const findings: RiskFinding[] = [];
+  if (!manifest) findings.push(finding('MANIFEST_MISSING', [archive.packageSha256]));
+  else if (!parseJson(manifest)) findings.push(finding('MANIFEST_PARSE_FAILED', [manifest.sha256]));
+  if (unsupported.length > 0) findings.push(finding('UNSUPPORTED_ARTIFACT_TYPE', unsupported.map(entry => entry.sha256)));
+  findings.push(finding('UNSUPPORTED_PACKAGE_PROFILE', [manifest?.sha256 ?? archive.packageSha256]));
+  return { format: 'generic-compatibility/1.0', findings, claims: [] };
+}
+
+function analyzeLegacy(archive: InspectedArchive): PackageAnalysis {
   const manifestEntry = mustEntry(archive, 'manifest.json');
   const contractEntry = mustEntry(archive, 'contract.json');
   const interfaceEntry = mustEntry(archive, 'interface.json');
-  const manifest = object(strictJsonParse(manifestEntry.content.toString('utf8')));
-  const contract = object(strictJsonParse(contractEntry.content.toString('utf8')));
-  const rpcInterface = object(strictJsonParse(interfaceEntry.content.toString('utf8')));
+  const manifest = object(json(manifestEntry, 'MANIFEST_PARSE_FAILED'));
+  const contract = object(json(contractEntry, 'ARTIFACT_PARSE_FAILED'));
+  const rpcInterface = object(json(interfaceEntry, 'ARTIFACT_PARSE_FAILED'));
   const declaredFiles = object(manifest.files);
   const actualNames = new Set(archive.entries.map(entry => entry.normalizedPath));
   const missing = Object.keys(declaredFiles).filter(name => !actualNames.has(name));
@@ -248,37 +422,38 @@ function analyzeLegacy(archive: InspectedArchive) {
     recordedAt: now
   }));
   return {
-    format: 'legacy-asset-declaration' as const,
+    format: 'legacy-asset-declaration',
     findings: codes.map(code => finding(code, [manifestEntry.sha256])),
     claims
   };
 }
 
-function analyzeV1(archive: InspectedArchive, trustedSourceKeys: Record<string, string>) {
+function analyzeV1(archive: InspectedArchive, trustedSourceKeys: Record<string, string>): PackageAnalysis {
   const manifestEntry = mustEntry(archive, 'manifest.json');
-  const signatureEntry = mustEntry(archive, 'manifest.sig');
-  const manifestValue = strictJsonParse(manifestEntry.content.toString('utf8'));
+  const manifestValue = json(manifestEntry, 'MANIFEST_PARSE_FAILED');
   const manifest = validateV1Manifest(manifestValue);
-  const signature = object(strictJsonParse(signatureEntry.content.toString('utf8')));
-  const keyId = text(signature.keyId, 'signature keyId');
-  const algorithm = text(signature.algorithm, 'signature algorithm');
-  const signatureValue = text(signature.signature, 'signature value');
-  const trustedKey = trustedSourceKeys[keyId];
-  let validSignature = false;
-  if (algorithm === 'Ed25519' && trustedKey) {
-    try {
-      validSignature = verify(
-        null,
-        Buffer.from(canonicalJson(manifestValue)),
-        trustedKey,
-        Buffer.from(signatureValue, 'base64')
-      );
-    } catch {
-      validSignature = false;
-    }
-  }
+  const signatureEntry = archive.entries.find(entry => entry.normalizedPath === 'manifest.sig');
   const findings: RiskFinding[] = [];
-  if (!validSignature) findings.push(finding('SOURCE_SIGNATURE_INVALID', [manifestEntry.sha256]));
+  if (!signatureEntry) {
+    findings.push(finding('SOURCE_SIGNATURE_MISSING', [manifestEntry.sha256]));
+  } else {
+    const signatureValue = parseSignature(signatureEntry);
+    const trustedKey = signatureValue ? trustedSourceKeys[signatureValue.keyId] : undefined;
+    let validSignature = false;
+    if (signatureValue?.algorithm === 'Ed25519' && trustedKey) {
+      try {
+        validSignature = verify(
+          null,
+          Buffer.from(canonicalJson(manifestValue)),
+          trustedKey,
+          Buffer.from(signatureValue.signature, 'base64')
+        );
+      } catch {
+        validSignature = false;
+      }
+    }
+    if (!validSignature) findings.push(finding('SOURCE_SIGNATURE_INVALID', [manifestEntry.sha256, signatureEntry.sha256]));
+  }
   validateV1Inventory(manifest, archive);
   const now = new Date().toISOString();
   const claimValues: Array<[string, unknown]> = [
@@ -300,7 +475,7 @@ function analyzeV1(archive: InspectedArchive, trustedSourceKeys: Record<string, 
   }));
   findings.push(finding('INCOMING_SETTLEMENT_UNOBSERVED', [manifestEntry.sha256]));
   return {
-    format: 'brokered-funding/1.0' as const,
+    format: 'brokered-funding/1.0',
     submissionIdentity: manifest.submission.id,
     findings,
     claims,
@@ -308,9 +483,24 @@ function analyzeV1(archive: InspectedArchive, trustedSourceKeys: Record<string, 
   };
 }
 
+function parseSignature(entry: InspectedEntry) {
+  try {
+    const signature = object(json(entry, 'ARTIFACT_PARSE_FAILED'));
+    return {
+      keyId: text(signature.keyId, 'signature keyId'),
+      algorithm: text(signature.algorithm, 'signature algorithm'),
+      signature: text(signature.signature, 'signature value')
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 function validateV1Manifest(value: unknown): V1Manifest {
   const manifest = object(value) as unknown as V1Manifest;
-  if (manifest.format !== 'brokered-funding/1.0') throw new Error('Unsupported package format.');
+  if (manifest.format !== 'brokered-funding/1.0') {
+    throw new IntakeValidationError('UNSUPPORTED_PACKAGE_PROFILE', 'Unsupported package format.');
+  }
   text(manifest.envelope?.id, 'envelope id');
   timestamp(manifest.envelope?.createdAt, 'envelope timestamp');
   text(manifest.source?.id, 'source id');
@@ -330,17 +520,21 @@ function validateV1Manifest(value: unknown): V1Manifest {
   text(manifest.expectedIncomingCredit?.destinationAccountId, 'incoming destination account');
   text(manifest.expectedIncomingCredit?.investorName, 'incoming investor name');
   if (!Array.isArray(manifest.payoutAllocations) || manifest.payoutAllocations.length === 0) {
-    throw new Error('Manifest payout allocations are required.');
+    throw new IntakeValidationError('REQUIRED_TRANSACTION_FIELD_NOT_FOUND', 'Manifest payout allocations are required.');
   }
   text(manifest.purpose, 'purpose');
-  if (!Array.isArray(manifest.artifacts)) throw new Error('Manifest artifact inventory is required.');
+  if (!Array.isArray(manifest.artifacts)) {
+    throw new IntakeValidationError('REQUIRED_TRANSACTION_FIELD_NOT_FOUND', 'Manifest artifact inventory is required.');
+  }
   for (const artifact of manifest.artifacts) {
     text(artifact.path, 'artifact path');
     text(artifact.mediaType, 'artifact media type');
     if (!Number.isSafeInteger(artifact.byteLength) || artifact.byteLength < 0) {
-      throw new Error('Artifact byte length must be a non-negative integer.');
+      throw new IntakeValidationError('REQUIRED_TRANSACTION_FIELD_NOT_FOUND', 'Artifact byte length must be a non-negative integer.');
     }
-    if (!/^[a-f0-9]{64}$/.test(artifact.sha256)) throw new Error('Artifact SHA-256 is invalid.');
+    if (!/^[a-f0-9]{64}$/.test(artifact.sha256)) {
+      throw new IntakeValidationError('REQUIRED_TRANSACTION_FIELD_NOT_FOUND', 'Artifact SHA-256 is invalid.');
+    }
   }
   return manifest;
 }
@@ -350,21 +544,40 @@ function validateV1Inventory(manifest: V1Manifest, archive: InspectedArchive) {
   const actualNames = new Set(archive.entries.map(entry => entry.normalizedPath));
   if (expectedNames.size !== actualNames.size ||
       [...expectedNames].some(name => !actualNames.has(name))) {
-    throw new Error('Strict v1 artifact inventory does not exactly match the ZIP.');
+    throw new IntakeValidationError('MANIFEST_INVENTORY_MISMATCH', 'Strict v1 artifact inventory does not exactly match the ZIP.');
   }
   for (const declared of manifest.artifacts) {
-    const actual = mustEntry(archive, declared.path);
-    if (actual.byteLength !== declared.byteLength || actual.sha256 !== declared.sha256 ||
+    const actual = archive.entries.find(entry => entry.normalizedPath === declared.path);
+    if (!actual || actual.byteLength !== declared.byteLength || actual.sha256 !== declared.sha256 ||
         actual.mediaType !== declared.mediaType) {
-      throw new Error(`Strict v1 artifact metadata mismatch for ${declared.path}.`);
+      throw new IntakeValidationError('MANIFEST_INVENTORY_MISMATCH', 'Strict v1 artifact metadata does not match the manifest.');
     }
   }
 }
 
 function mustEntry(archive: InspectedArchive, path: string): InspectedEntry {
   const entry = archive.entries.find(candidate => candidate.normalizedPath === path);
-  if (!entry) throw new Error(`Required package artifact ${path} is missing.`);
+  if (!entry) throw new IntakeValidationError(path === 'manifest.json' ? 'MANIFEST_MISSING' : 'REQUIRED_TRANSACTION_FIELD_NOT_FOUND', `Required package artifact ${path} is missing.`);
   return entry;
+}
+
+function parseJson(entry: InspectedEntry) {
+  try {
+    return strictJsonParse(entry.content.toString('utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
+function json(entry: InspectedEntry, code: string) {
+  const value = parseJson(entry);
+  if (value === undefined) throw new IntakeValidationError(code, `Artifact ${entry.normalizedPath} is not valid JSON.`);
+  return value;
+}
+
+function intakeFailureCode(error: unknown) {
+  if (error instanceof IntakeValidationError) return error.code;
+  return 'ARTIFACT_PARSE_FAILED';
 }
 
 function object(value: unknown) {
@@ -375,25 +588,34 @@ function object(value: unknown) {
 
 function text(value: unknown, description: string) {
   if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new Error(`Manifest ${description} is required.`);
+    throw new IntakeValidationError('REQUIRED_TRANSACTION_FIELD_NOT_FOUND', `Manifest ${description} is required.`);
   }
   return value;
 }
 
 function timestamp(value: unknown, description: string) {
   const result = text(value, description);
-  if (!Number.isFinite(Date.parse(result))) throw new Error(`Manifest ${description} is invalid.`);
+  if (!Number.isFinite(Date.parse(result))) {
+    throw new IntakeValidationError('REQUIRED_TRANSACTION_FIELD_NOT_FOUND', `Manifest ${description} is invalid.`);
+  }
 }
 
 function money(value: unknown, description: string) {
   const record = object(value);
   if (!Number.isSafeInteger(record.amountMinor) || Number(record.amountMinor) < 1) {
-    throw new Error(`Manifest ${description} amountMinor must be a positive safe integer.`);
+    throw new IntakeValidationError('REQUIRED_TRANSACTION_FIELD_NOT_FOUND', `Manifest ${description} amountMinor must be a positive safe integer.`);
   }
   if (typeof record.currency !== 'string' || !/^[A-Z]{3}$/.test(record.currency)) {
-    throw new Error(`Manifest ${description} currency is invalid.`);
+    throw new IntakeValidationError('REQUIRED_TRANSACTION_FIELD_NOT_FOUND', `Manifest ${description} currency is invalid.`);
   }
   if (!Number.isInteger(record.exponent) || Number(record.exponent) < 0 || Number(record.exponent) > 6) {
-    throw new Error(`Manifest ${description} exponent is invalid.`);
+    throw new IntakeValidationError('REQUIRED_TRANSACTION_FIELD_NOT_FOUND', `Manifest ${description} exponent is invalid.`);
+  }
+  const expectedExponent = canonicalCurrencyExponent(record.currency);
+  if (expectedExponent === undefined || record.exponent !== expectedExponent) {
+    throw new IntakeValidationError(
+      'REQUIRED_TRANSACTION_FIELD_NOT_FOUND',
+      `Manifest ${description} must use the canonical currency exponent.`
+    );
   }
 }

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -26,6 +27,26 @@ interface JobRow {
   case_id: string;
   submission_id: string;
 }
+
+interface CaseEventInput {
+  eventType: string;
+  actor: string;
+  reason: string;
+  evidenceRefs?: string[];
+  payload?: Record<string, unknown>;
+  // Internal mutation guards: provider workers and a claimed reconciliation
+  // are the only operations allowed to write while their durable lock exists.
+  allowExecutionMutation?: boolean;
+  allowFundingMutation?: boolean;
+  requiredExecutionPlanVersion?: number;
+  requiredExecutionLockState?: 'ACTIVE' | 'RECONCILING';
+  requiredExecutionClaimToken?: string;
+}
+
+type ExecutionReservation = 'ACQUIRED' | 'CASE_LOCKED' | 'PILOT_LOCKED' | 'STALE';
+type FundingReservation = 'ACQUIRED' | 'ALREADY_RESERVED' | 'STALE';
+type ConditionalSave = 'SAVED' | 'STALE';
+type FundingObservationRecovery = 'SAVED' | 'STALE' | 'NOT_ACTIVE';
 
 export class SQLiteCaseStore {
   private readonly database: DatabaseSync;
@@ -87,7 +108,35 @@ export class SQLiteCaseStore {
       );
       CREATE INDEX IF NOT EXISTS case_jobs_pending
         ON case_jobs(state, available_at);
+      CREATE TABLE IF NOT EXISTS case_execution_locks (
+        case_id TEXT PRIMARY KEY,
+        plan_version INTEGER NOT NULL,
+        plan_digest TEXT NOT NULL,
+        state TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (state IN ('ACTIVE', 'READY_TO_RECONCILE', 'RECONCILING')),
+        acquired_at TEXT NOT NULL,
+        lease_updated_at TEXT NOT NULL,
+        claim_token TEXT,
+        FOREIGN KEY (case_id) REFERENCES brokered_cases(id)
+      );
+      CREATE TABLE IF NOT EXISTS sandbox_execution_locks (
+        lock_name TEXT PRIMARY KEY,
+        case_id TEXT NOT NULL,
+        plan_version INTEGER NOT NULL,
+        acquired_at TEXT NOT NULL,
+        FOREIGN KEY (case_id) REFERENCES brokered_cases(id)
+      );
+      CREATE TABLE IF NOT EXISTS case_funding_attempt_locks (
+        case_id TEXT NOT NULL,
+        expectation_digest TEXT NOT NULL,
+        attempt_id TEXT NOT NULL,
+        state TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (state IN ('ACTIVE', 'RECORDED')),
+        acquired_at TEXT NOT NULL,
+        PRIMARY KEY (case_id, expectation_digest),
+        FOREIGN KEY (case_id) REFERENCES brokered_cases(id)
+      );
     `);
+    this.ensureLockStateColumns();
+    this.recoverTerminalReservations();
   }
 
   create(record: BrokeredCase, submissionId: string, packageSha256: string) {
@@ -121,7 +170,7 @@ export class SQLiteCaseStore {
     const row = this.database.prepare(
       'SELECT record_json FROM brokered_cases WHERE id = ?'
     ).get(id) as JsonRow | undefined;
-    return row ? JSON.parse(row.record_json) as BrokeredCase : undefined;
+    return row ? this.readRecord(row.record_json) : undefined;
   }
 
   findBySubmissionId(id: string) {
@@ -130,7 +179,7 @@ export class SQLiteCaseStore {
       JOIN case_submission_identities s ON s.case_id = c.id
       WHERE s.submission_id = ?
     `).get(id) as JsonRow | undefined;
-    return row ? JSON.parse(row.record_json) as BrokeredCase : undefined;
+    return row ? this.readRecord(row.record_json) : undefined;
   }
 
   bindSubmissionIdentity(caseId: string, submissionId: string, packageSha256: string) {
@@ -154,58 +203,15 @@ export class SQLiteCaseStore {
     const rows = this.database.prepare(`
       SELECT record_json FROM brokered_cases ORDER BY updated_at DESC LIMIT ?
     `).all(limit) as unknown as JsonRow[];
-    return rows.map(row => JSON.parse(row.record_json) as BrokeredCase);
+    return rows.map(row => this.readRecord(row.record_json));
   }
 
-  save(
-    record: BrokeredCase,
-    event: {
-      eventType: string;
-      actor: string;
-      reason: string;
-      evidenceRefs?: string[];
-      payload?: Record<string, unknown>;
-    }
-  ) {
+  save(record: BrokeredCase, event: CaseEventInput) {
     this.database.exec('BEGIN IMMEDIATE');
     try {
+      this.assertMutationAllowed(record.id, event);
       this.insertOrUpdate(record);
-      const previous = this.database.prepare(`
-        SELECT sequence, event_hash FROM case_events
-        WHERE case_id = ? ORDER BY sequence DESC LIMIT 1
-      `).get(record.id) as { sequence: number; event_hash: string } | undefined;
-      const createdAt = new Date().toISOString();
-      const sequence = Number(previous?.sequence ?? 0) + 1;
-      const previousHash = previous?.event_hash ?? '0'.repeat(64);
-      const eventBody = {
-        caseId: record.id,
-        sequence,
-        previousHash,
-        eventType: event.eventType,
-        actor: event.actor,
-        reason: event.reason,
-        evidenceRefs: event.evidenceRefs ?? [],
-        payload: event.payload ?? {},
-        createdAt
-      };
-      const eventHash = sha256(canonicalJson(eventBody));
-      this.database.prepare(`
-        INSERT INTO case_events (
-          case_id, sequence, previous_hash, event_hash, event_type, actor,
-          reason, evidence_refs_json, payload_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        record.id,
-        sequence,
-        previousHash,
-        eventHash,
-        event.eventType,
-        event.actor,
-        event.reason,
-        JSON.stringify(event.evidenceRefs ?? []),
-        JSON.stringify(event.payload ?? {}),
-        createdAt
-      );
+      const eventHash = this.appendEvent(record, event);
       this.database.exec('COMMIT');
       return eventHash;
     } catch (error) {
@@ -244,6 +250,269 @@ export class SQLiteCaseStore {
     }));
   }
 
+  saveIfCurrent(record: BrokeredCase, expectedRevision: number, event: CaseEventInput): ConditionalSave {
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      if (!this.isCurrentRecord(record.id, expectedRevision)) {
+        this.database.exec('ROLLBACK');
+        return 'STALE';
+      }
+      this.assertMutationAllowed(record.id, event);
+      this.insertOrUpdate(record);
+      this.appendEvent(record, event);
+      this.database.exec('COMMIT');
+      return 'SAVED';
+    } catch (error) {
+      if (this.database.isTransaction) this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  saveObservedFundingRecovery(
+    record: BrokeredCase,
+    expectationDigest: string,
+    expectedRevision: number,
+    event: CaseEventInput
+  ): FundingObservationRecovery {
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      if (!this.isCurrentRecord(record.id, expectedRevision)) {
+        this.database.exec('ROLLBACK');
+        return 'STALE';
+      }
+      const lock = this.database.prepare(`
+        SELECT state FROM case_funding_attempt_locks
+        WHERE case_id = ? AND expectation_digest = ?
+      `).get(record.id, expectationDigest) as { state: string } | undefined;
+      if (lock?.state !== 'ACTIVE') {
+        this.database.exec('ROLLBACK');
+        return 'NOT_ACTIVE';
+      }
+      this.assertMutationAllowed(record.id, { ...event, allowFundingMutation: true });
+      this.insertOrUpdate(record);
+      this.appendEvent(record, event);
+      this.database.prepare(`
+        UPDATE case_funding_attempt_locks SET state = 'RECORDED'
+        WHERE case_id = ? AND expectation_digest = ? AND state = 'ACTIVE'
+      `).run(record.id, expectationDigest);
+      if (!this.lastStatementChanged()) throw new Error('Funding recovery reservation changed before it could be recorded.');
+      this.database.exec('COMMIT');
+      return 'SAVED';
+    } catch (error) {
+      if (this.database.isTransaction) this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  reserveExecution(
+    record: BrokeredCase,
+    planVersion: number,
+    planDigest: string,
+    expectedRevision: number,
+    event: CaseEventInput
+  ): ExecutionReservation {
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      if (!this.isCurrentRecord(record.id, expectedRevision)) {
+        this.database.exec('ROLLBACK');
+        return 'STALE';
+      }
+      this.database.prepare(`
+        INSERT OR IGNORE INTO case_execution_locks (
+          case_id, plan_version, plan_digest, state, acquired_at, lease_updated_at
+        ) VALUES (?, ?, ?, 'ACTIVE', ?, ?)
+      `).run(record.id, planVersion, planDigest, new Date().toISOString(), new Date().toISOString());
+      if (!this.lastStatementChanged()) {
+        this.database.exec('ROLLBACK');
+        return 'CASE_LOCKED';
+      }
+      this.database.prepare(`
+        INSERT OR IGNORE INTO sandbox_execution_locks (lock_name, case_id, plan_version, acquired_at)
+        VALUES ('high-value-sandbox-pilot', ?, ?, ?)
+      `).run(record.id, planVersion, new Date().toISOString());
+      if (!this.lastStatementChanged()) {
+        this.database.exec('ROLLBACK');
+        return 'PILOT_LOCKED';
+      }
+      this.insertOrUpdate(record);
+      this.appendEvent(record, event);
+      this.database.exec('COMMIT');
+      return 'ACQUIRED';
+    } catch (error) {
+      if (this.database.isTransaction) this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  releaseExecutionLock(caseId: string, planVersion: number) {
+    this.database.prepare(`
+      DELETE FROM case_execution_locks WHERE case_id = ? AND plan_version = ?
+    `).run(caseId, planVersion);
+  }
+
+  releaseExecutionReservation(caseId: string, planVersion: number) {
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      this.database.prepare(`
+        DELETE FROM case_execution_locks WHERE case_id = ? AND plan_version = ?
+      `).run(caseId, planVersion);
+      this.database.prepare(`
+        DELETE FROM sandbox_execution_locks
+        WHERE lock_name = 'high-value-sandbox-pilot' AND case_id = ? AND plan_version = ?
+      `).run(caseId, planVersion);
+      this.database.exec('COMMIT');
+    } catch (error) {
+      if (this.database.isTransaction) this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  executionLockState(caseId: string, planVersion: number) {
+    const row = this.database.prepare(`
+      SELECT state FROM case_execution_locks WHERE case_id = ? AND plan_version = ?
+    `).get(caseId, planVersion) as { state: 'ACTIVE' | 'READY_TO_RECONCILE' | 'RECONCILING' } | undefined;
+    return row?.state;
+  }
+
+  hasActiveExecutionLock(caseId: string) {
+    const row = this.database.prepare(`
+      SELECT 1 AS present FROM case_execution_locks WHERE case_id = ? AND state = 'ACTIVE'
+    `).get(caseId) as { present: number } | undefined;
+    return Boolean(row?.present);
+  }
+
+  private hasExecutionMutationLock(caseId: string) {
+    const row = this.database.prepare(`
+      SELECT 1 AS present FROM case_execution_locks
+      WHERE case_id = ? AND state IN ('ACTIVE', 'RECONCILING')
+    `).get(caseId) as { present: number } | undefined;
+    return Boolean(row?.present);
+  }
+
+  markExecutionReadyAfterSubmission(caseId: string, planVersion: number) {
+    this.database.prepare(`
+      UPDATE case_execution_locks SET state = 'READY_TO_RECONCILE', lease_updated_at = ?
+      WHERE case_id = ? AND plan_version = ? AND state = 'ACTIVE'
+    `).run(new Date().toISOString(), caseId, planVersion);
+  }
+
+  releaseExecutionReconciliationClaim(caseId: string, planVersion: number, claimToken: string) {
+    this.database.prepare(`
+      UPDATE case_execution_locks
+      SET state = 'READY_TO_RECONCILE', lease_updated_at = ?, claim_token = NULL
+      WHERE case_id = ? AND plan_version = ? AND state = 'RECONCILING' AND claim_token = ?
+    `).run(new Date().toISOString(), caseId, planVersion, claimToken);
+  }
+
+  claimExecutionReconciliation(caseId: string, planVersion: number) {
+    const claimToken = randomUUID();
+    this.database.prepare(`
+      UPDATE case_execution_locks
+      SET state = 'RECONCILING', lease_updated_at = ?, claim_token = ?
+      WHERE case_id = ? AND plan_version = ? AND state = 'READY_TO_RECONCILE'
+    `).run(new Date().toISOString(), claimToken, caseId, planVersion);
+    return this.lastStatementChanged() ? claimToken : undefined;
+  }
+
+  claimStaleExecutionReconciliation(caseId: string, planVersion: number, staleBefore: string) {
+    const claimToken = randomUUID();
+    this.database.prepare(`
+      UPDATE case_execution_locks
+      SET state = 'RECONCILING', lease_updated_at = ?, claim_token = ?
+      WHERE case_id = ? AND plan_version = ? AND state IN ('ACTIVE', 'RECONCILING')
+        AND lease_updated_at <= ?
+    `).run(new Date().toISOString(), claimToken, caseId, planVersion, staleBefore);
+    return this.lastStatementChanged() ? claimToken : undefined;
+  }
+
+  heartbeatExecutionLock(
+    caseId: string,
+    planVersion: number,
+    state: 'ACTIVE' | 'RECONCILING' = 'ACTIVE',
+    claimToken?: string
+  ) {
+    const statement = claimToken
+      ? this.database.prepare(`
+          UPDATE case_execution_locks SET lease_updated_at = ?
+          WHERE case_id = ? AND plan_version = ? AND state = ? AND claim_token = ?
+        `)
+      : this.database.prepare(`
+          UPDATE case_execution_locks SET lease_updated_at = ?
+          WHERE case_id = ? AND plan_version = ? AND state = ?
+        `);
+    if (claimToken) statement.run(new Date().toISOString(), caseId, planVersion, state, claimToken);
+    else statement.run(new Date().toISOString(), caseId, planVersion, state);
+    return this.lastStatementChanged();
+  }
+
+  acquirePilotExecutionLock(caseId: string, planVersion: number) {
+    this.database.prepare(`
+      INSERT OR IGNORE INTO sandbox_execution_locks (lock_name, case_id, plan_version, acquired_at)
+      VALUES ('high-value-sandbox-pilot', ?, ?, ?)
+    `).run(caseId, planVersion, new Date().toISOString());
+    return this.lastStatementChanged();
+  }
+
+  releasePilotExecutionLock(caseId: string, planVersion: number) {
+    this.database.prepare(`
+      DELETE FROM sandbox_execution_locks
+      WHERE lock_name = 'high-value-sandbox-pilot' AND case_id = ? AND plan_version = ?
+    `).run(caseId, planVersion);
+  }
+
+  reserveFundingAttempt(
+    record: BrokeredCase,
+    expectationDigest: string,
+    attemptId: string,
+    expectedRevision: number,
+    event: CaseEventInput
+  ): FundingReservation {
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      if (!this.isCurrentRecord(record.id, expectedRevision)) {
+        this.database.exec('ROLLBACK');
+        return 'STALE';
+      }
+      this.database.prepare(`
+        INSERT OR IGNORE INTO case_funding_attempt_locks (
+          case_id, expectation_digest, attempt_id, state, acquired_at
+        ) VALUES (?, ?, ?, 'ACTIVE', ?)
+      `).run(record.id, expectationDigest, attemptId, new Date().toISOString());
+      if (!this.lastStatementChanged()) {
+        this.database.exec('ROLLBACK');
+        return 'ALREADY_RESERVED';
+      }
+      this.insertOrUpdate(record);
+      this.appendEvent(record, event);
+      this.database.exec('COMMIT');
+      return 'ACQUIRED';
+    } catch (error) {
+      if (this.database.isTransaction) this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  hasActiveFundingAttemptLock(caseId: string) {
+    const row = this.database.prepare(`
+      SELECT 1 AS present FROM case_funding_attempt_locks
+      WHERE case_id = ? AND state = 'ACTIVE'
+    `).get(caseId) as { present: number } | undefined;
+    return Boolean(row?.present);
+  }
+
+  markFundingAttemptRecorded(caseId: string, expectationDigest: string) {
+    this.database.prepare(`
+      UPDATE case_funding_attempt_locks SET state = 'RECORDED'
+      WHERE case_id = ? AND expectation_digest = ? AND state = 'ACTIVE'
+    `).run(caseId, expectationDigest);
+  }
+
+  releaseFundingAttemptLock(caseId: string, expectationDigest: string) {
+    this.database.prepare(`
+      DELETE FROM case_funding_attempt_locks WHERE case_id = ? AND expectation_digest = ?
+    `).run(caseId, expectationDigest);
+  }
+
   events(caseId: string) {
     const rows = this.database.prepare(`
       SELECT case_id, sequence, previous_hash, event_hash, event_type,
@@ -279,7 +548,168 @@ export class SQLiteCaseStore {
     this.database.close();
   }
 
+  private lastStatementChanged() {
+    const row = this.database.prepare('SELECT changes() AS changes').get() as { changes: number };
+    return Number(row.changes) === 1;
+  }
+
+  private isCurrentRecord(caseId: string, expectedRevision: number) {
+    const row = this.database.prepare(`
+      SELECT record_json FROM brokered_cases WHERE id = ?
+    `).get(caseId) as { record_json: string } | undefined;
+    return row !== undefined && this.readRecord(row.record_json).revision === expectedRevision;
+  }
+
+  private assertMutationAllowed(caseId: string, event: CaseEventInput) {
+    if (event.requiredExecutionPlanVersion !== undefined) {
+      const expectedState = event.requiredExecutionLockState ?? 'ACTIVE';
+      const lock = this.database.prepare(`
+        SELECT state, claim_token FROM case_execution_locks
+        WHERE case_id = ? AND plan_version = ?
+      `).get(caseId, event.requiredExecutionPlanVersion) as {
+        state: 'ACTIVE' | 'READY_TO_RECONCILE' | 'RECONCILING'; claim_token: string | null;
+      } | undefined;
+      if (lock?.state !== expectedState ||
+          (event.requiredExecutionClaimToken !== undefined && lock.claim_token !== event.requiredExecutionClaimToken)) {
+        throw new Error('The Sandbox execution reservation is no longer owned by this worker.');
+      }
+    }
+    if (!event.allowExecutionMutation && this.hasExecutionMutationLock(caseId)) {
+      throw new Error('Case mutation is locked while a Sandbox execution is being submitted or reconciled.');
+    }
+    if (!event.allowFundingMutation && this.hasActiveFundingAttemptLock(caseId)) {
+      throw new Error('Case mutation is locked while a Sandbox funding submission is being recorded.');
+    }
+  }
+
+  private ensureLockStateColumns() {
+    const executionColumns = this.database.prepare('PRAGMA table_info(case_execution_locks)').all() as Array<{ name: string }>;
+    if (!executionColumns.some(column => column.name === 'state')) {
+      this.database.exec("ALTER TABLE case_execution_locks ADD COLUMN state TEXT NOT NULL DEFAULT 'ACTIVE'");
+    }
+    const executionColumnsAfterState = this.database.prepare('PRAGMA table_info(case_execution_locks)').all() as Array<{ name: string }>;
+    if (!executionColumnsAfterState.some(column => column.name === 'lease_updated_at')) {
+      this.database.exec("ALTER TABLE case_execution_locks ADD COLUMN lease_updated_at TEXT NOT NULL DEFAULT ''");
+      this.database.exec("UPDATE case_execution_locks SET lease_updated_at = acquired_at WHERE lease_updated_at = ''");
+    }
+    const executionColumnsAfterLease = this.database.prepare('PRAGMA table_info(case_execution_locks)').all() as Array<{ name: string }>;
+    if (!executionColumnsAfterLease.some(column => column.name === 'claim_token')) {
+      this.database.exec('ALTER TABLE case_execution_locks ADD COLUMN claim_token TEXT');
+    }
+    const executionTable = this.database.prepare(`
+      SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'case_execution_locks'
+    `).get() as { sql?: string } | undefined;
+    // Earlier pilot builds only allowed ACTIVE/READY_TO_RECONCILE. Rebuild
+    // this small lock table so a claimed reconciliation is also durable.
+    if (!executionTable?.sql?.includes('RECONCILING')) {
+      this.database.exec('BEGIN IMMEDIATE');
+      try {
+        this.database.exec(`
+          CREATE TABLE case_execution_locks_rebuilt (
+            case_id TEXT PRIMARY KEY,
+            plan_version INTEGER NOT NULL,
+            plan_digest TEXT NOT NULL,
+            state TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (state IN ('ACTIVE', 'READY_TO_RECONCILE', 'RECONCILING')),
+            acquired_at TEXT NOT NULL,
+            lease_updated_at TEXT NOT NULL,
+            claim_token TEXT,
+            FOREIGN KEY (case_id) REFERENCES brokered_cases(id)
+          );
+          INSERT INTO case_execution_locks_rebuilt (
+            case_id, plan_version, plan_digest, state, acquired_at, lease_updated_at, claim_token
+          ) SELECT case_id, plan_version, plan_digest, state, acquired_at, lease_updated_at, claim_token
+            FROM case_execution_locks;
+          DROP TABLE case_execution_locks;
+          ALTER TABLE case_execution_locks_rebuilt RENAME TO case_execution_locks;
+        `);
+        this.database.exec('COMMIT');
+      } catch (error) {
+        if (this.database.isTransaction) this.database.exec('ROLLBACK');
+        throw error;
+      }
+    }
+    const fundingColumns = this.database.prepare('PRAGMA table_info(case_funding_attempt_locks)').all() as Array<{ name: string }>;
+    if (!fundingColumns.some(column => column.name === 'state')) {
+      this.database.exec("ALTER TABLE case_funding_attempt_locks ADD COLUMN state TEXT NOT NULL DEFAULT 'ACTIVE'");
+    }
+  }
+
+  private recoverTerminalReservations() {
+    const executionLocks = this.database.prepare(`
+      SELECT case_id, plan_version FROM case_execution_locks
+    `).all() as Array<{ case_id: string; plan_version: number }>;
+    for (const lock of executionLocks) {
+      const record = this.get(lock.case_id);
+      const plan = record?.plans.find(item => item.version === Number(lock.plan_version));
+      if (plan && ['RECONCILED', 'FAILED'].includes(plan.status)) {
+        this.releaseExecutionReservation(lock.case_id, Number(lock.plan_version));
+      }
+    }
+    const pilotLocks = this.database.prepare(`
+      SELECT case_id, plan_version FROM sandbox_execution_locks
+      WHERE lock_name = 'high-value-sandbox-pilot'
+    `).all() as Array<{ case_id: string; plan_version: number }>;
+    for (const lock of pilotLocks) {
+      const record = this.get(lock.case_id);
+      const plan = record?.plans.find(item => item.version === Number(lock.plan_version));
+      if (plan && ['RECONCILED', 'FAILED'].includes(plan.status)) {
+        this.releaseExecutionReservation(lock.case_id, Number(lock.plan_version));
+      }
+    }
+    const fundingLocks = this.database.prepare(`
+      SELECT case_id, expectation_digest FROM case_funding_attempt_locks WHERE state = 'ACTIVE'
+    `).all() as Array<{ case_id: string; expectation_digest: string }>;
+    for (const lock of fundingLocks) {
+      const record = this.get(lock.case_id);
+      const attempt = record?.fundingAttempts?.find(item => item.expectationDigest === lock.expectation_digest);
+      if (attempt && ['COMPLETED', 'FAILED', 'REVERTED', 'DECLINED'].includes(attempt.state)) {
+        this.markFundingAttemptRecorded(lock.case_id, lock.expectation_digest);
+      }
+    }
+  }
+
+  private appendEvent(record: BrokeredCase, event: CaseEventInput) {
+    const previous = this.database.prepare(`
+      SELECT sequence, event_hash FROM case_events
+      WHERE case_id = ? ORDER BY sequence DESC LIMIT 1
+    `).get(record.id) as { sequence: number; event_hash: string } | undefined;
+    const createdAt = new Date().toISOString();
+    const sequence = Number(previous?.sequence ?? 0) + 1;
+    const previousHash = previous?.event_hash ?? '0'.repeat(64);
+    const eventBody = {
+      caseId: record.id,
+      sequence,
+      previousHash,
+      eventType: event.eventType,
+      actor: event.actor,
+      reason: event.reason,
+      evidenceRefs: event.evidenceRefs ?? [],
+      payload: event.payload ?? {},
+      createdAt
+    };
+    const eventHash = sha256(canonicalJson(eventBody));
+    this.database.prepare(`
+      INSERT INTO case_events (
+        case_id, sequence, previous_hash, event_hash, event_type, actor,
+        reason, evidence_refs_json, payload_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      record.id,
+      sequence,
+      previousHash,
+      eventHash,
+      event.eventType,
+      event.actor,
+      event.reason,
+      JSON.stringify(event.evidenceRefs ?? []),
+      JSON.stringify(event.payload ?? {}),
+      createdAt
+    );
+    return eventHash;
+  }
+
   private insertOrUpdate(record: BrokeredCase) {
+    record.revision = (record.revision ?? 0) + 1;
     this.database.prepare(`
       INSERT INTO brokered_cases (
         id, case_status, funding_status, execution_status,
@@ -300,5 +730,11 @@ export class SQLiteCaseStore {
       record.createdAt,
       record.updatedAt
     );
+  }
+
+  private readRecord(value: string) {
+    const record = JSON.parse(value) as BrokeredCase;
+    record.revision ??= 0;
+    return record;
   }
 }

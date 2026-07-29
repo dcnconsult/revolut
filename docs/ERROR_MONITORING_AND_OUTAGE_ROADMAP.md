@@ -8,7 +8,7 @@ maintainers own the implementation roadmap.
 1. Stop the current authorization or execution.
 2. Record the time, release, redacted case or transfer reference, and the
    plain-language message.
-3. Do not retry a pending or ambiguous provider request.
+3. Do not retry a pending or unclear Sandbox result.
 4. Use **Reconcile** when the application offers it.
 5. Escalate through the approved channel and wait for recorded recovery.
 
@@ -22,6 +22,11 @@ This module consolidates redacted Revolut Sandbox and application failures in
 the existing SQLite operations database. It is monitoring infrastructure, not
 a live-money queue.
 
+The automatic retry rules below are limited to safe read-only checks and token
+handling. A broker-case funding or payout request moves Sandbox test value and
+is never automatically repeated. If its result is pending or unclear, keep the
+redacted result in the case and reconcile the existing request instead.
+
 ## Official error model
 
 Revolut documents these Business API HTTP responses:
@@ -29,12 +34,12 @@ Revolut documents these Business API HTTP responses:
 | Status | Classification | Current response |
 | --- | --- | --- |
 | `400`, `405`, `406`, `422` | Invalid request or response contract | Record warning; do not retry |
-| `401` | Access token invalid or expired | Refresh once, then record a blocking authentication error |
+| `401` | Access token invalid or expired | Refresh for a later safe check, then record a blocking authentication error; do not replay a broker-case funding or payout |
 | `403` | Scope, permission, account, or policy block | Record blocking authorization error; operator review |
 | `404`, `409` | Missing resource or state conflict | Record warning; reconcile before another action |
-| `429` | Rate limit | Honor bounded `Retry-After` delay and retry at most twice |
-| `500`, `503` | Provider unavailable | Bounded retry; record a blocking provider error if exhausted |
-| Network/timeout | Outcome may be unknown | Bounded retry only with a stable idempotency key |
+| `429` | Rate limit | For a safe read-only check, honor a bounded `Retry-After` delay and retry at most twice; do not replay a broker-case funding or payout |
+| `500`, `503` | Provider unavailable | A safe read-only check may retry in a bounded way; record and reconcile a broker-case result instead |
+| Network/timeout | Outcome may be unknown | A safe read-only check may retry in a bounded way; treat a broker-case payment result as unclear and reconcile it |
 
 References:
 
@@ -50,11 +55,16 @@ References:
 - A `401` clears the cached access token and refreshes once.
 - Concurrent callers share one in-flight token refresh. This avoids one
   refresh invalidating a token another caller has just obtained.
-- `429` and `5xx` responses use a bounded delay and at most two retries.
+- `429` and `5xx` responses use a bounded delay and at most two retries only
+  for safe non-money-moving calls.
 - `Retry-After` is honored but capped at two seconds for an interactive
   request. Longer outages are reported instead of tying up the service.
-- Transfer retries reuse the same provider `request_id`, which Revolut
-  documents as the idempotency control that prevents duplicate processing.
+- Provider request identifiers remain stable where Revolut supports them, but
+  they are not permission to automatically replay a broker-case funding or
+  payout request.
+- Broker-case funding and payout requests disable transient retries. Their
+  redacted provider result is kept as case evidence; an unclear result must be
+  reconciled before anyone considers a new case decision.
 - No background process submits a prepared transfer.
 - Errors are classified, redacted, fingerprinted, and stored in SQLite.
 - Repeated identical errors increment one record rather than flooding logs.
@@ -103,9 +113,10 @@ second payment with a new request ID.
    allowlisting. Do not retry repeatedly.
 5. For `409`, retrieve and reconcile the existing resource before deciding
    whether any further action is valid.
-6. For `429`, stop manual repetition and allow the bounded backoff to work.
-7. For `5xx`, timeout, or network failure, treat submission outcome as
-   ambiguous until the stable request ID or provider transaction is reconciled.
+6. For `429`, stop manual repetition. A safe read-only check may use its
+   bounded backoff; a broker-case request remains stopped.
+7. For `5xx`, timeout, or network failure, treat a broker-case submission
+   outcome as ambiguous until the existing provider transaction is reconciled.
 8. Confirm recovery through the same operation; successful recovery marks the
    consolidated error resolved.
 

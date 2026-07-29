@@ -4,14 +4,17 @@
 
 The monitor answers one narrow question: can the private service safely reach
 the approved Revolut Sandbox and read the expected test information? It does
-not approve a case, move money, or prove readiness for Production.
+not read a client case ZIP, approve a case, move money, or prove readiness for
+Production.
 
 ## Read the result
 
 1. Open the approved daily-check record or operator console.
 2. Confirm the record is for today's approved release.
 3. Confirm the environment says **Sandbox**.
-4. Confirm live data says **false**.
+4. Confirm the record says **live data: false**. This means the monitor is not
+   using Production or live money; it is not permission to handle a client case
+   ZIP.
 5. Read the final result.
 
 ### Green or passed
@@ -34,7 +37,7 @@ or switch hosts.
 
 The monitor does not:
 
-- access live customer or banking data;
+- access Production customer or banking data, or read client case ZIPs;
 - make or authorize a transfer;
 - verify a submitted funding package;
 - match an incoming credit;

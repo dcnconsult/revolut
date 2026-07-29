@@ -28,9 +28,14 @@ Fresh, and never treat this closeout note as authorization to execute.
 ## Safety boundary
 
 Routine automation never submits a transfer. The dedicated account-transfer
-workflow can move only Sandbox test funds and requires its separate execution
-switch. Credentials, account identifiers, balances, and private keys are not
-printed by monitoring or smoke-test summaries.
+workflow can move only a small Sandbox test amount and requires its separate
+execution switch. A separately authorised broker case may run one controlled
+Sandbox test for its full confirmed case amount, within the separate case
+limit. It still cannot use live money. If that result is unclear, keep the
+record and reconcile it; do not automatically submit another test.
+
+Credentials, account identifiers, balances, and private keys are not printed
+by monitoring or smoke-test summaries.
 
 ## Deferred until live-conversion planning
 
@@ -52,5 +57,6 @@ configuration are installed.
 - [`DIGITALOCEAN_DEPLOYMENT.md`](DIGITALOCEAN_DEPLOYMENT.md)
 - [`SANDBOX_LIVE_MODE.md`](SANDBOX_LIVE_MODE.md)
 - [`SANDBOX_ACCOUNT_TRANSFER_TEST_GUIDE.md`](SANDBOX_ACCOUNT_TRANSFER_TEST_GUIDE.md)
+- [`BROKERED_FUNDING_CASES.md`](BROKERED_FUNDING_CASES.md)
 - [`PRODUCTION_READINESS_GUIDE.md`](PRODUCTION_READINESS_GUIDE.md)
 - [`ERROR_MONITORING_AND_OUTAGE_ROADMAP.md`](ERROR_MONITORING_AND_OUTAGE_ROADMAP.md)

@@ -15,6 +15,11 @@ const REFRESH_MARGIN_MS = 60_000;
 const API_TIMEOUT_MS = 8_000;
 const MAX_TRANSIENT_RETRIES = 2;
 
+function isNonJsonProviderResponse(value: unknown): value is { nonJson: true; body: string; truncated: boolean } {
+  return Boolean(value) && typeof value === 'object' &&
+    (value as Record<string, unknown>).nonJson === true;
+}
+
 export interface RevolutSandboxAccount {
   id: string;
   name?: string;
@@ -62,7 +67,7 @@ export interface SandboxInternalTransferClient {
     reference: string;
   }): Promise<RevolutSandboxTransfer>;
   getTransaction(transactionId: string): Promise<RevolutSandboxTransfer>;
-  listTransactions?(): Promise<RevolutSandboxTransaction[]>;
+  listTransactions?(input?: { requestId?: string; from?: string }): Promise<RevolutSandboxTransaction[]>;
   simulateTopUp?(input: {
     accountId: string;
     amount: number;
@@ -115,7 +120,9 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
 
   async getAccounts() {
     const result = await this.request('/accounts');
-    if (!Array.isArray(result)) throw new Error('Revolut Sandbox /accounts did not return a list.');
+    if (!Array.isArray(result)) throw new OperationalFault('Revolut Sandbox /accounts did not return a list.', {
+      category: 'invalid_response', severity: 'critical', retryable: false, providerResponse: result
+    });
     return result.map(account => this.parseAccount(account));
   }
 
@@ -136,7 +143,8 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
         amount: input.amount,
         currency: input.currency,
         reference: input.reference
-      }
+      },
+      retry: false
     });
     return this.parseTransfer(result);
   }
@@ -146,9 +154,14 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
     return this.parseTransfer(await this.request(`/transaction/${encodeURIComponent(transactionId)}`));
   }
 
-  async listTransactions() {
-    const result = await this.request('/transactions?count=100');
-    if (!Array.isArray(result)) throw new Error('Revolut Sandbox /transactions did not return a list.');
+  async listTransactions(input: { requestId?: string; from?: string } = {}) {
+    const query = new URLSearchParams({ count: '100' });
+    if (input.requestId) query.set('request_id', input.requestId);
+    if (input.from) query.set('from', input.from);
+    const result = await this.request(`/transactions?${query.toString()}`);
+    if (!Array.isArray(result)) throw new OperationalFault('Revolut Sandbox /transactions did not return a list.', {
+      category: 'invalid_response', severity: 'critical', retryable: false, providerResponse: result
+    });
     return result.map(value => this.parseTransaction(value));
   }
 
@@ -166,17 +179,22 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
         currency: input.currency,
         reference: input.reference,
         state: 'completed'
-      }
+      },
+      retry: false
     }));
   }
 
   async getCounterparties() {
     const result = await this.request('/counterparties');
-    if (!Array.isArray(result)) throw new Error('Revolut Sandbox /counterparties did not return a list.');
+    if (!Array.isArray(result)) throw new OperationalFault('Revolut Sandbox /counterparties did not return a list.', {
+      category: 'invalid_response', severity: 'critical', retryable: false, providerResponse: result
+    });
     return result.map(value => {
       const id = this.stringField(value, 'id');
       const name = this.stringField(value, 'name');
-      if (!id || !name) throw new Error('Revolut Sandbox returned an invalid counterparty.');
+      if (!id || !name) throw new OperationalFault('Revolut Sandbox returned an invalid counterparty.', {
+        category: 'invalid_response', severity: 'critical', retryable: false, providerResponse: value
+      });
       const state = this.stringField(value, 'state');
       const rawAccounts = this.field(value, 'accounts');
       const accounts = Array.isArray(rawAccounts)
@@ -210,11 +228,15 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
         amount: input.amount,
         currency: input.currency,
         reference: input.reference
-      }
+      },
+      retry: false
     }));
   }
 
-  private async request(path: string, options: { method?: string; body?: unknown } = {}) {
+  private async request(
+    path: string,
+    options: { method?: string; body?: unknown; retry?: boolean } = {}
+  ) {
     if (!path.startsWith('/')) throw new Error('Sandbox API path must start with /.');
     const credentials = await this.loadCredentials();
     let accessToken = await this.getAccessToken(credentials);
@@ -225,7 +247,7 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
       try {
         response = await this.fetchApi(credentials.baseUrl, path, accessToken, options);
       } catch {
-        if (transientRetries < MAX_TRANSIENT_RETRIES) {
+        if (options.retry !== false && transientRetries < MAX_TRANSIENT_RETRIES) {
           await delay(this.retryDelay(undefined, transientRetries++));
           continue;
         }
@@ -234,14 +256,14 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
           { category: 'network', severity: 'critical', retryable: true }
         );
       }
-      if (response.status === 401 && !authenticationRetried) {
+      if (response.status === 401 && !authenticationRetried && options.retry !== false) {
         authenticationRetried = true;
         this.cachedToken = undefined;
         accessToken = await this.getAccessToken(credentials);
         continue;
       }
       if ((response.status === 429 || response.status >= 500) &&
-          transientRetries < MAX_TRANSIENT_RETRIES) {
+          options.retry !== false && transientRetries < MAX_TRANSIENT_RETRIES) {
         await delay(this.retryDelay(response, transientRetries++));
         continue;
       }
@@ -249,7 +271,19 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
       if (!response.ok) {
         throw new OperationalFault(
           `Revolut Sandbox ${options.method ?? 'GET'} ${path} failed (HTTP ${response.status}).`,
-          classifyHttpStatus(response.status)
+          { ...classifyHttpStatus(response.status), providerResponse: payload }
+        );
+      }
+      if (isNonJsonProviderResponse(payload)) {
+        throw new OperationalFault(
+          `Revolut Sandbox ${options.method ?? 'GET'} ${path} returned a non-JSON response (HTTP ${response.status}).`,
+          {
+            category: 'invalid_response',
+            severity: 'critical',
+            retryable: false,
+            httpStatus: response.status,
+            providerResponse: payload
+          }
         );
       }
       return payload;
@@ -260,7 +294,7 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
     baseUrl: string,
     path: string,
     accessToken: string,
-    options: { method?: string; body?: unknown }
+    options: { method?: string; body?: unknown; retry?: boolean }
   ) {
     return this.fetchImplementation(`${baseUrl}${path}`, {
       method: options.method ?? 'GET',
@@ -312,12 +346,12 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
     const payload = await this.readResponse(response);
     const accessToken = this.stringField(payload, 'access_token');
     const expiresIn = Number(this.field(payload, 'expires_in'));
-    if (!response.ok || !accessToken || !Number.isFinite(expiresIn) || expiresIn <= 0) {
+    if (!response.ok || isNonJsonProviderResponse(payload) || !accessToken || !Number.isFinite(expiresIn) || expiresIn <= 0) {
       throw new OperationalFault(
         `Revolut Sandbox token refresh failed (HTTP ${response.status}).`,
         response.ok
-          ? { category: 'invalid_response', severity: 'critical', retryable: false }
-          : classifyHttpStatus(response.status)
+          ? { category: 'invalid_response', severity: 'critical', retryable: false, providerResponse: payload }
+          : { ...classifyHttpStatus(response.status), providerResponse: payload }
       );
     }
     this.cachedToken = { value: accessToken, expiresAt: Date.now() + expiresIn * 1000 };
@@ -347,7 +381,9 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
     const state = this.stringField(value, 'state');
     const balance = Number(this.field(value, 'balance'));
     if (!id || !currency || !state || !Number.isFinite(balance)) {
-      throw new Error('Revolut Sandbox returned an invalid account.');
+      throw new OperationalFault('Revolut Sandbox returned an invalid account.', {
+        category: 'invalid_response', severity: 'critical', retryable: false, providerResponse: value
+      });
     }
     const name = this.stringField(value, 'name');
     return {
@@ -362,7 +398,11 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
   private parseTransfer(value: unknown): RevolutSandboxTransfer {
     const id = this.stringField(value, 'id');
     const state = this.stringField(value, 'state');
-    if (!id || !state) throw new Error('Revolut Sandbox returned an invalid transfer.');
+    if (!id || !state) {
+      throw new OperationalFault('Revolut Sandbox returned an invalid transfer.', {
+        category: 'invalid_response', severity: 'critical', retryable: false, providerResponse: value
+      });
+    }
     const createdAt = this.stringField(value, 'created_at');
     const completedAt = this.stringField(value, 'completed_at');
     return {
@@ -381,7 +421,9 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
           const amount = String(this.field(leg, 'amount') ?? '');
           const currency = this.stringField(leg, 'currency');
           if (!/^-?\d+(?:\.\d+)?$/.test(amount) || !currency) {
-            throw new Error('Revolut Sandbox returned an invalid transaction leg.');
+            throw new OperationalFault('Revolut Sandbox returned an invalid transaction leg.', {
+              category: 'invalid_response', severity: 'critical', retryable: false, providerResponse: value
+            });
           }
           const accountId = this.stringField(leg, 'account_id');
           return { amount, currency, ...(accountId ? { account_id: accountId } : {}) };
@@ -412,15 +454,14 @@ export class RevolutSandboxClient implements SandboxInternalTransferClient {
     try {
       return JSON.parse(text) as unknown;
     } catch {
-      throw new OperationalFault(
-        `Revolut Sandbox returned a non-JSON response (HTTP ${response.status}).`,
-        {
-          category: 'invalid_response',
-          severity: 'critical',
-          retryable: response.status >= 500,
-          httpStatus: response.status
-        }
-      );
+      return {
+        nonJson: true,
+        // Evidence encryption/redaction is applied by the case service. This
+        // cap prevents an anomalous response from becoming an unbounded case
+        // artifact while retaining the provider's diagnostic body.
+        body: text.slice(0, 65_536),
+        truncated: text.length > 65_536
+      };
     }
   }
 

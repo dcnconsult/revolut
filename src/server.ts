@@ -55,6 +55,7 @@ interface BuildAppOptions {
   caseScanner?: MalwareScanner;
   trustedSourceKeys?: Record<string, string>;
   evidenceSigningKeyPem?: string;
+  caseSandboxMaximumMinorByCurrency?: Record<string, number>;
 }
 
 export function buildApp(options: BuildAppOptions = {}) {
@@ -166,7 +167,7 @@ export function buildApp(options: BuildAppOptions = {}) {
       },
       options.trustedSourceKeys ?? env.trustedSourceKeys,
       options.evidenceSigningKeyPem ?? (env.CASE_EVIDENCE_SIGNING_KEY_PEM || undefined),
-      env.SANDBOX_INTERNAL_TRANSFER_MAX_MINOR
+      options.caseSandboxMaximumMinorByCurrency ?? env.caseSandboxMaximumMinorByCurrency
     );
     caseService.resumePendingJobs();
     app.addHook('onClose', async () => {
