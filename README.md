@@ -1,85 +1,94 @@
-# Revolut Sandbox funding workbench
+# Revolut Sandbox case workspace
 
-This application helps one authorized operator review synthetic funding cases,
-observe test funds in Revolut Sandbox, approve an exact payout plan, execute the
-test payouts, and keep a signed evidence record.
+This private workspace helps an authorised broker review a case, check a test
+credit in Revolut Sandbox, prepare the planned test payouts, and keep a signed
+record of what happened.
 
-It does **not** handle live money. An uploaded package creates a case for human
-review; it never proves that funds arrived and never authorizes a payment.
+It is a **test-only** workspace. It does not handle live money, turn on a
+Production Revolut connection, or let an uploaded file approve a payment. A ZIP file is
+only information to review; it is never proof that money arrived.
 
-## Start with the operator guide
+## If you are working a case
 
-If you use the browser application, begin with
-[Start here for operators](docs/START_HERE.md).
+Start with [Start here for brokers and operators](docs/START_HERE.md). You do
+not need terminal, API, or technical file-format knowledge to use the normal
+browser workflow.
 
-The application also has a side-by-side HTML guide:
+The application also has a side-by-side guide:
 
-1. Open the operator application.
+1. Open the private operator application.
 2. Select **Operator guide ↗**.
-3. Keep the new guide window beside the application.
-4. Use the search box to find tasks or statuses such as “upload,” “pending,”
-   “backup,” or “reconcile.”
+3. Keep the guide open beside the application.
+4. Search for everyday words such as “upload”, “missing information”,
+   “test credit”, “unclear result”, or “download record”.
 
-## The safe operating sequence
+## The normal broker sequence
 
-Always complete these steps in order:
+Work through the case in this order:
 
-1. Upload the private ZIP package to quarantine.
-2. Wait for package safety and integrity checks.
-3. Compare submitted claims with machine and broker findings.
-4. Add corrections only as cited amendments.
-5. Independently observe and match the incoming Sandbox credit.
-6. Approve, reject, or request information.
-7. Review every payout, fee, reserve, and refund.
-8. Authorize and execute the exact plan.
-9. Reconcile provider results and export signed evidence.
+1. Upload the ZIP file exactly as received.
+2. Wait for the safety check, then read the file list and any questions.
+3. Review what the sender says, what the application found, and your own
+   broker notes separately.
+4. Record corrections with their reason and supporting record.
+5. Check for one matching **Sandbox test credit**.
+6. Approve, ask for more information, or reject the case.
+7. Read every planned payout, fee, reserve, and refund before approval.
+8. Authorise and run the Sandbox test once.
+9. Use **Reconcile** to check the final Sandbox result, then download the case
+   record.
+
+## Large Sandbox test amounts
+
+The small **Direct owned-account transfer test** is only a connection check.
+It has its own small limit and is not part of a broker case.
+
+An approved broker case has a separate Sandbox-only limit. The current USD
+test limit is up to USD 1 billion, subject to the private administrator's
+settings and Revolut Sandbox's response. The workspace always sends the full
+amount confirmed for the case. If Sandbox cannot accept it, the result is kept
+as a useful case finding; the workspace never quietly lowers the amount.
+
+## Important safety rules
+
+- Check for the yellow **REVOLUT SANDBOX · NO LIVE DATA** banner before work.
+  It confirms the test environment; it does not itself approve use of a client
+  case file.
+- Use Sandbox accounts only. Client case information may be used only after the
+  named pilot data-handling and retention approval is in place. Production
+  remains unavailable.
+- Upload representative operational files only after the approved retention
+  and sensitive-data controls are in place. Never put file contents in email,
+  chat, logs, or Git.
+- Do not share passwords, authenticator codes, recovery codes, or account
+  details.
+- Do not create a new test payment when the first result is unclear. Use
+  **Refresh** or **Reconcile** and record what Sandbox reports.
+- Stop if **Operations** is Blocked or **Backup** is not Fresh.
 
 ## Choose the right guide
 
 | I need to… | Read |
 | --- | --- |
-| Use the browser application | [Sandbox operator console](docs/SANDBOX_OPERATOR_CONSOLE.md) |
-| Work a funding case | [Funding-case guide](docs/BROKERED_FUNDING_CASES.md) |
-| Complete the daily check | [Operations runbook](docs/SANDBOX_OPERATIONS_RUNBOOK.md) |
-| Understand a status or term | [Plain-language glossary](docs/GLOSSARY.md) |
-| Run the advanced direct-transfer test | [Account transfer test](docs/SANDBOX_ACCOUNT_TRANSFER_TEST_GUIDE.md) |
-| Respond to an error | [Error and outage guide](docs/ERROR_MONITORING_AND_OUTAGE_ROADMAP.md) |
+| Start using the browser workspace | [Start here](docs/START_HERE.md) |
+| Work a case from file upload to final result | [Broker case guide](docs/BROKERED_FUNDING_CASES.md) |
+| Understand a word or status | [Plain-language glossary](docs/GLOSSARY.md) |
+| Complete the daily check | [Daily operations guide](docs/SANDBOX_OPERATIONS_RUNBOOK.md) |
+| Use the browser controls | [Sandbox operator console](docs/SANDBOX_OPERATOR_CONSOLE.md) |
+| Run the separate technical connection test | [Account transfer test](docs/SANDBOX_ACCOUNT_TRANSFER_TEST_GUIDE.md) |
+| Respond to an outage | [Error and outage guide](docs/ERROR_MONITORING_AND_OUTAGE_ROADMAP.md) |
 | Restore a backup | [Backup restore drill](docs/CASE_BACKUP_RESTORE.md) |
-| Set up or deploy the server | [Administrator deployment guide](docs/DIGITALOCEAN_DEPLOYMENT.md) |
-| Plan SSH, VPN, HTTPS, or mutual-TLS access | [Remote connection options](docs/REMOTE_CONNECTION_OPTIONS.md) |
-
-## Non-negotiable safety boundaries
-
-- Confirm the yellow **REVOLUT SANDBOX · NO LIVE DATA** banner before work.
-- Use only synthetic identities and low-value test amounts.
-- Never use or store investor Revolut credentials.
-- Never treat package content as independent evidence of settlement.
-- Never create a counterparty automatically from uploaded instructions.
-- Never retry an authorization or payment with an unclear result.
-- Stop when Operations is Blocked or Backup is not Fresh.
-- Production mode remains unavailable.
 
 ## For administrators and developers
 
-Daily operators should not run terminal commands or call private APIs.
-Administrators can use the following references:
+Daily brokers and operators should not run terminal commands or private APIs.
+Administrator references are kept separately:
 
 - [Beginner Linux setup](docs/SANDBOX_SETUP_LINUX_BEGINNER.md)
 - [Sandbox deployment](docs/DIGITALOCEAN_DEPLOYMENT.md)
 - [System architecture](docs/ARCHITECTURE.md)
-- [ISO 20022 administrator reference](docs/ISO20022_IMPORT.md)
 - [Implementation status](docs/IMPLEMENTATION_CHECKLIST.md)
 - [Production readiness gates](docs/PRODUCTION_READINESS_GUIDE.md)
 
-`docs/business.yml` is a vendor API specification retained for maintainers and
-tooling. It is not an operator guide and should not be edited as a procedure.
-
-Before releasing a change, administrators run:
-
-```text
-npm run check
-npm run build
-npm run test:e2e
-```
-
-These are administrator commands, not operator procedures.
+`docs/business.yml` is a vendor API specification for maintainers and tooling,
+not a broker procedure.

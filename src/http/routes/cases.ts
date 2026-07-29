@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { BrokeredFundingCaseService } from '../../cases/case-service.js';
+import type { BrokeredCase } from '../../cases/model.js';
 import type { OperatorAuth } from '../../security/operator-auth.js';
 
 interface CaseParams {
@@ -20,6 +21,7 @@ interface SandboxWalkthroughBody {
   sourceAccountId?: string;
   amountMinor?: number;
   currency?: string;
+  exponent?: number;
 }
 
 export async function caseRoutes(
@@ -59,7 +61,10 @@ export async function caseRoutes(
     if (!principal) return;
     const limit = parseLimit(request.query.limit);
     if (!limit) return reply.badRequest('limit must be an integer between 1 and 500.');
-    return service.list(limit);
+    const cases = service.list(limit);
+    return principal.role === 'viewer'
+      ? cases.map(redactCaseSummaryForViewer)
+      : cases;
   });
 
   app.get<{ Params: CaseParams }>('/cases/:id', async (request, reply) => {
@@ -82,7 +87,8 @@ export async function caseRoutes(
         return await service.prepareSandboxWalkthrough(request.params.id, {
           sourceAccountId: request.body?.sourceAccountId ?? '',
           amountMinor: request.body?.amountMinor ?? 0,
-          currency: request.body?.currency ?? ''
+          currency: request.body?.currency ?? '',
+          ...(request.body?.exponent === undefined ? {} : { exponent: request.body.exponent })
         }, principal.username);
       } catch (error) {
         return reply.badRequest(publicMessage(error, 'Sandbox walkthrough could not be prepared.'));
@@ -224,7 +230,9 @@ export async function caseRoutes(
   });
 
   app.get<{ Params: CaseParams }>('/cases/:id/evidence', async (request, reply) => {
-    const principal = auth.require(request, reply, ['admin', 'viewer']);
+    // Evidence bundles include encrypted-package plaintext for auditable export.
+    // Viewer access is deliberately limited to the redacted case summary route.
+    const principal = auth.require(request, reply, ['admin']);
     if (!principal) return;
     try {
       const bundle = service.evidenceBundle(request.params.id);
@@ -257,13 +265,51 @@ function publicMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-function redactCaseForViewer(record: ReturnType<BrokeredFundingCaseService['get']>) {
+/**
+ * A viewer is allowed a case-health summary only.  Do not spread `record` here:
+ * it contains package contents' metadata, broker-entered facts, account and
+ * counterparty identifiers, and the audit material reserved for administrators.
+ */
+function redactCaseForViewer(record: BrokeredCase) {
   return {
-    ...record,
-    claims: record.claims.map(claim => ({
-      ...claim,
-      value: '[redacted — administrator evidence view]'
+    id: record.id,
+    caseStatus: record.caseStatus,
+    fundingStatus: record.fundingStatus,
+    executionStatus: record.executionStatus,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    submissions: record.submissions.map(submission => ({
+      id: `submission-${submission.version}`,
+      version: submission.version,
+      format: submission.format,
+      state: submission.state,
+      scanner: submission.scanner,
+      receivedAt: submission.receivedAt,
+      completedAt: submission.completedAt
     })),
+    artifacts: record.artifacts.map(artifact => ({
+      path: '[redacted — administrator evidence view]',
+      mediaType: artifact.mediaType,
+      byteLength: artifact.byteLength,
+      scanStatus: artifact.scanStatus
+    })),
+    riskFindings: record.riskFindings.map((finding, index) => {
+      const isBrokerFinding = finding.code.startsWith('BROKER_');
+      return {
+        id: `finding-${index + 1}`,
+        code: isBrokerFinding ? 'BROKER_REVIEW' : finding.code,
+        severity: finding.severity,
+        hardBlock: finding.hardBlock,
+        createdAt: finding.createdAt,
+        resolvedAt: finding.resolvedAt,
+        message: isBrokerFinding
+          ? 'A broker review requires administrator follow-up.'
+          : finding.message,
+        neededNext: isBrokerFinding
+          ? 'Contact an administrator for the broker-review details.'
+          : finding.neededNext
+      };
+    }),
     fundingExpectation: record.fundingExpectation
       ? {
           amountMinor: record.fundingExpectation.amountMinor,
@@ -274,11 +320,27 @@ function redactCaseForViewer(record: ReturnType<BrokeredFundingCaseService['get'
           investorName: '[redacted]'
         }
       : undefined,
-    providerObservations: record.providerObservations.map(observation => ({
-      ...observation,
-      accountId: '[redacted]',
-      providerTransactionId: observation.providerTransactionId.slice(0, 8),
-      reference: '[redacted]'
+    // Viewer access intentionally excludes provider/account data and the
+    // broker-authored plan. Case and execution status above remain available.
+    providerObservations: [],
+    plans: record.plans.map(plan => ({
+      version: plan.version,
+      createdAt: plan.createdAt,
+      status: plan.status,
+      digest: '[redacted]'
     }))
+  };
+}
+
+function redactCaseSummaryForViewer(record: ReturnType<BrokeredFundingCaseService['list']>[number]) {
+  return {
+    id: record.id,
+    caseStatus: record.caseStatus,
+    fundingStatus: record.fundingStatus,
+    executionStatus: record.executionStatus,
+    overallRisk: record.overallRisk,
+    hardBlockCount: record.hardBlockCount,
+    updatedAt: record.updatedAt,
+    nextAction: 'Review this case status with an administrator.'
   };
 }

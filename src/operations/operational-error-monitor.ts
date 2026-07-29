@@ -57,6 +57,7 @@ interface FaultOptions {
   severity?: OperationalErrorSeverity;
   retryable: boolean;
   httpStatus?: number;
+  providerResponse?: unknown;
 }
 
 export class OperationalFault extends Error {
@@ -64,6 +65,7 @@ export class OperationalFault extends Error {
   readonly severity: OperationalErrorSeverity;
   readonly retryable: boolean;
   readonly httpStatus: number | undefined;
+  readonly providerResponse: unknown | undefined;
 
   constructor(message: string, options: FaultOptions) {
     super(message);
@@ -72,6 +74,7 @@ export class OperationalFault extends Error {
     this.severity = options.severity ?? (options.retryable ? 'warning' : 'critical');
     this.retryable = options.retryable;
     this.httpStatus = options.httpStatus;
+    this.providerResponse = options.providerResponse;
   }
 }
 

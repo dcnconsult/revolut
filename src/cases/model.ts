@@ -49,7 +49,7 @@ export interface Submission {
   id: string;
   version: number;
   packageSha256: string;
-  format: 'brokered-funding/1.0' | 'legacy-asset-declaration';
+  format: 'brokered-funding/1.0' | 'legacy-asset-declaration' | 'generic-compatibility/1.0';
   originalArtifactSha256: string;
   state: 'QUEUED' | 'VALIDATING' | 'QUARANTINED' | 'VALIDATED' | 'FAILED';
   receivedAt: string;
@@ -134,6 +134,18 @@ export interface ProviderObservation extends Money {
   rawResponseSha256: string;
 }
 
+export interface FundingAttempt {
+  id: string;
+  expectationDigest: string;
+  providerRequestId: string;
+  providerTransactionId?: string;
+  providerRequestHash?: string;
+  providerResponseHash?: string;
+  state: 'SUBMITTING' | 'PENDING' | 'COMPLETED' | 'FAILED' | 'REVERTED' | 'DECLINED' | 'AMBIGUOUS';
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type AllocationKind =
   | 'CUSTOMER_PAYOUT'
   | 'BROKER_FEE'
@@ -162,7 +174,7 @@ export interface FundingPlan {
   allocations: FundingAllocation[];
   digest: string;
   riskSnapshotDigest: string;
-  status: 'DRAFT' | 'AWAITING_AUTHORIZATION' | 'AUTHORIZED' | 'STALE' | 'EXECUTING' | 'RECONCILED';
+  status: 'DRAFT' | 'AWAITING_AUTHORIZATION' | 'AUTHORIZED' | 'STALE' | 'EXECUTING' | 'RECONCILED' | 'FAILED';
 }
 
 export interface Approval {
@@ -201,6 +213,10 @@ export interface RiskSnapshot {
 
 export interface BrokeredCase {
   id: string;
+  // Monotonically advanced by the SQLite store on every durable mutation.
+  // Optional only so records written before this concurrency guard remain
+  // readable and normalize to revision 0 on their first write.
+  revision?: number;
   caseStatus: CaseStatus;
   fundingStatus: FundingStatus;
   executionStatus: ExecutionStatus;
@@ -214,6 +230,9 @@ export interface BrokeredCase {
   amendments: CaseAmendment[];
   fundingExpectation?: IncomingFundingExpectation;
   providerObservations: ProviderObservation[];
+  // Optional for compatibility with records written before funding attempts
+  // were explicitly persisted; services initialize it before mutation.
+  fundingAttempts?: FundingAttempt[];
   plans: FundingPlan[];
   approvals: Approval[];
   executionAttempts: ExecutionAttempt[];

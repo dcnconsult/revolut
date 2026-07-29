@@ -25,6 +25,11 @@ not become healthy.
 - Deployments run as the dedicated `deploy` user, not `root`.
 - `/etc/revolut/revolut.env` must contain `REVOLUT_MODE=sandbox` for the
   active deployment. The deterministic local fallback uses `mock`.
+- The same private environment file controls the Sandbox-only case maximum as
+  `CASE_SANDBOX_MAXIMUMS_JSON`. It is a JSON map of currency codes to positive
+  integer minor-unit limits; the initial USD ceiling is
+  `{"USD":100000000000}`. Keep `SANDBOX_INTERNAL_TRANSFER_MAX_MINOR` small
+  because it applies only to the direct diagnostic tool.
 - The activation script permits only `mock` or `sandbox` and refuses
   Production mode.
 - GitHub Actions secrets contain SSH connection material; Git does not.

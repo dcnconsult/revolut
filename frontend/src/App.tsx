@@ -257,11 +257,89 @@ interface CaseSummary {
 }
 
 interface CaseRiskFinding {
+  id?: string;
   code: string;
   message: string;
   neededNext: string;
   hardBlock: boolean;
+  severity?: string;
+  createdAt?: string;
   resolvedAt?: string;
+  resolvedByAmendmentId?: string;
+}
+
+interface CasePackageProfile {
+  id?: string;
+  version?: string;
+  label?: string;
+  name?: string;
+  confidence?: string;
+}
+
+interface CasePackageHealth {
+  state?: string;
+  status?: string;
+  scanner?: string;
+  scanStatus?: string;
+  profile?: CasePackageProfile | string;
+  packageProfile?: CasePackageProfile | string;
+  message?: string;
+}
+
+interface CaseSubmission {
+  id: string;
+  version?: number;
+  packageSha256?: string;
+  format?: string;
+  profile?: CasePackageProfile | string;
+  packageProfile?: CasePackageProfile | string;
+  state?: string;
+  scanner?: string;
+  receivedAt?: string;
+  completedAt?: string;
+}
+
+interface CaseArtifact {
+  id?: string;
+  submissionId?: string;
+  path: string;
+  mediaType?: string;
+  byteLength?: number;
+  sha256?: string;
+  scanStatus?: string;
+}
+
+interface CaseClaim {
+  id?: string;
+  path: string;
+  value: unknown;
+  source?: string;
+  recordedAt?: string;
+}
+
+interface CaseAmendment {
+  id?: string;
+  version?: number;
+  reason: string;
+  source: string;
+  claims?: Array<{ path: string; value: unknown }>;
+  resolvesFindingCodes?: string[];
+  recordedAt?: string;
+}
+
+interface CaseBrokerFinding {
+  id?: string;
+  category: string;
+  outcome: 'PASS' | 'CONCERN' | 'BLOCK';
+  note: string;
+  recordedAt?: string;
+}
+
+interface CaseDecision {
+  outcome: 'APPROVE' | 'REJECT' | 'REQUEST_INFORMATION';
+  reason: string;
+  actor?: string;
+  decidedAt?: string;
 }
 
 interface CaseFundingExpectation {
@@ -291,11 +369,33 @@ interface CaseRecord {
   caseStatus: string;
   fundingStatus: string;
   executionStatus: string;
-  riskFindings: CaseRiskFinding[];
+  submissions?: CaseSubmission[];
+  packageProfile?: CasePackageProfile | string;
+  packageHealth?: CasePackageHealth;
+  artifacts?: CaseArtifact[];
+  riskFindings?: CaseRiskFinding[];
+  claims?: CaseClaim[];
+  amendments?: CaseAmendment[];
+  brokerFindings?: CaseBrokerFinding[];
+  decision?: CaseDecision;
   fundingExpectation?: CaseFundingExpectation;
   providerObservations: CaseProviderObservation[];
   plans: CasePlan[];
 }
+
+// The case walkthrough sends integer minor units. Keep this explicit and
+// fail closed for an account currency that has not been reviewed for this UI.
+const SANDBOX_WALKTHROUGH_CURRENCY_EXPONENTS: Readonly<Record<string, number>> = Object.freeze({
+  BHD: 3,
+  CHF: 2,
+  EUR: 2,
+  GBP: 2,
+  JPY: 0,
+  KWD: 3,
+  OMR: 3,
+  TND: 3,
+  USD: 2
+});
 
 function CaseWorkflow({
   session,
@@ -397,7 +497,7 @@ function CaseWorkflow({
           <td className="message-cell">{item.nextAction}</td>
           <td><button className="button ghost" disabled={busy} onClick={() => void openCase(item.id)}>Open case</button></td>
         </tr>)}</tbody></table></div>}
-    {selectedCase && <SandboxCaseRunner
+    {selectedCase && <CaseDetail
       record={selectedCase}
       accounts={accounts}
       session={session}
@@ -407,7 +507,7 @@ function CaseWorkflow({
   </section>;
 }
 
-function SandboxCaseRunner({
+function CaseDetail({
   record,
   accounts,
   session,
@@ -422,9 +522,15 @@ function SandboxCaseRunner({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const activeFindings = record.riskFindings.filter(item => !item.resolvedAt);
+  const [walkthroughSourceAccountId, setWalkthroughSourceAccountId] = useState('');
+  const [walkthroughAmount, setWalkthroughAmount] = useState('');
+  const findings = record.riskFindings ?? [];
+  const activeFindings = findings.filter(item => !item.resolvedAt);
   const latestPlan = record.plans.at(-1);
   const expectation = record.fundingExpectation;
+  const latestSubmission = record.submissions?.at(-1);
+  const canPrepareSandboxWalkthrough = latestSubmission?.format === 'generic-compatibility/1.0' &&
+    latestSubmission.state === 'VALIDATED' && latestSubmission.scanner === 'CLEAN';
   const matchedObservation = expectation
     ? record.providerObservations.find(item =>
         item.direction === 'CREDIT' &&
@@ -441,6 +547,12 @@ function SandboxCaseRunner({
       target.id !== source.id && target.state === 'active' && target.currency === source.currency
     )
   );
+  const selectedWalkthroughSource = sourceCandidates.find(account =>
+    account.id === walkthroughSourceAccountId
+  ) ?? sourceCandidates[0];
+  const walkthroughExponent = selectedWalkthroughSource
+    ? sandboxWalkthroughCurrencyExponent(selectedWalkthroughSource.currency)
+    : undefined;
   const payoutTargets = expectation
     ? accounts.filter(account =>
         account.id !== expectation.destinationAccountId &&
@@ -448,6 +560,12 @@ function SandboxCaseRunner({
         account.currency === expectation.currency
       )
     : [];
+
+  useEffect(() => {
+    setWalkthroughAmount(walkthroughExponent === undefined
+      ? ''
+      : defaultWalkthroughAmount(walkthroughExponent));
+  }, [selectedWalkthroughSource?.id, walkthroughExponent]);
 
   async function perform(action: () => Promise<unknown>, message: string) {
     setBusy(true);
@@ -464,11 +582,15 @@ function SandboxCaseRunner({
 
   async function prepareWalkthrough(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const source = sourceCandidates.find(item => item.id === data.get('sourceAccountId'));
-    const amountMinor = Math.round(Number(data.get('amount')) * 100);
-    if (!source || !Number.isSafeInteger(amountMinor) || amountMinor < 1) {
-      setError('Select a Sandbox account and enter a positive amount.');
+    const source = selectedWalkthroughSource;
+    const exponent = walkthroughExponent;
+    const amountMinor = exponent === undefined
+      ? undefined
+      : parseDecimalToMinor(walkthroughAmount, exponent);
+    if (!source || exponent === undefined || amountMinor === undefined) {
+      setError(exponent === undefined
+        ? 'The selected Sandbox account currency has no reviewed minor-unit precision for this walkthrough.'
+        : `Select a Sandbox account and enter a positive amount with no more than ${exponent} decimal places.`);
       return;
     }
     await perform(
@@ -477,7 +599,8 @@ function SandboxCaseRunner({
         body: JSON.stringify({
           sourceAccountId: source.id,
           amountMinor,
-          currency: source.currency
+          currency: source.currency,
+          exponent
         })
       }, session.csrfToken),
       'Sandbox-only case inputs prepared. The uploaded package remains in the audit trail but is not relied upon.'
@@ -549,11 +672,11 @@ function SandboxCaseRunner({
     );
   }
 
-  return <section className="case-runner" aria-label="Selected funding case">
+  return <section className="case-runner case-detail" aria-label="Selected funding case">
     <div className="panel-heading">
       <div>
         <p className="eyebrow">Selected case</p>
-        <h2><code>{record.id.slice(0, 8)}</code> · Sandbox walkthrough</h2>
+        <h2>Case detail · <code>{record.id.slice(0, 8)}</code></h2>
       </div>
       <div className="actions">
         <button className="button ghost" disabled={busy} onClick={() => void onChanged('Case status refreshed.')}>Refresh</button>
@@ -566,19 +689,29 @@ function SandboxCaseRunner({
       <span><small>Execution</small><strong>{plainAction(record.executionStatus)}</strong></span>
       <span><small>Open findings</small><strong>{activeFindings.length}</strong></span>
     </div>
-    <p className="sandbox-walkthrough-note">
-      <strong>Sandbox only.</strong> This walkthrough uses synthetic instructions and owned Revolut Sandbox accounts.
-      It never treats the uploaded package as cleared evidence and cannot reach live funds.
-    </p>
-    {activeFindings.length > 0 && <details>
-      <summary>View current findings</summary>
-      <ul>{activeFindings.map(item =>
-        <li key={item.code}><strong>{plainAction(item.code)}:</strong> {item.message}</li>
-      )}</ul>
-    </details>}
-    {error && <p className="error" role="alert">{error}</p>}
+    <CasePackageOverview record={record} />
+    <CaseFindings findings={findings} />
+    <BrokerCaseReview
+      record={record}
+      accounts={accounts}
+      session={session}
+      busy={busy}
+      onAction={perform}
+    />
+    <section className="sandbox-walkthrough" aria-labelledby="sandbox-walkthrough-heading">
+      <div className="detail-section-heading">
+        <div>
+          <p className="eyebrow">Controlled option</p>
+          <h3 id="sandbox-walkthrough-heading">Sandbox walkthrough</h3>
+        </div>
+      </div>
+      <p className="sandbox-walkthrough-note">
+        <strong>Sandbox only.</strong> This walkthrough uses synthetic instructions and owned Revolut Sandbox accounts.
+        It never treats the uploaded package as cleared evidence and cannot reach live funds.
+      </p>
+      {error && <p className="error" role="alert">{error}</p>}
 
-    {session.role !== 'admin'
+      {session.role !== 'admin'
       ? <p className="muted">Read-only accounts can review this case but cannot advance it.</p>
       : record.caseStatus === 'CLOSED'
         ? <div className="runner-step complete">
@@ -587,35 +720,60 @@ function SandboxCaseRunner({
             <p>Download the signed evidence bundle for the complete case history.</p>
             <a className="button help-link" href={`/v1/cases/${record.id}/evidence`} download>Download signed evidence</a>
           </div>
+        : !expectation && !canPrepareSandboxWalkthrough
+          ? <div className="runner-step">
+              <p className="eyebrow">Diagnostic intake hold</p>
+              <h3>Review the package before continuing</h3>
+              <p>
+                The Sandbox walkthrough is available only for a clean ZIP in the generic compatibility profile.
+                Unsafe, unscanned, or transaction-ready packages cannot use synthetic walkthrough inputs.
+              </p>
+            </div>
         : !expectation
           ? <div className="runner-step">
               <p className="eyebrow">Step 1</p>
               <h3>Prepare synthetic Sandbox case inputs</h3>
-              <p>This explicitly bypasses unusable uploaded claims for this Sandbox case only.</p>
+              <p>This explicitly supplies Sandbox-only diagnostic inputs; it never clears or trusts the uploaded package claims.</p>
               <form className="prepare-form" onSubmit={prepareWalkthrough}>
                 <label>Incoming Sandbox account
-                  <select name="sourceAccountId" required>
+                  <select
+                    name="sourceAccountId"
+                    value={selectedWalkthroughSource?.id ?? ''}
+                    onChange={event => setWalkthroughSourceAccountId(event.currentTarget.value)}
+                    required
+                  >
                     {sourceCandidates.map(account =>
                       <option key={account.id} value={account.id}>{account.name} · {account.currency}</option>
                     )}
                   </select>
                 </label>
                 <label>Test amount
-                  <input name="amount" type="number" min="0.01" step="0.01" defaultValue="10.00" required />
+                  <input
+                    name="amount"
+                    type="text"
+                    inputMode={walkthroughExponent === 0 ? 'numeric' : 'decimal'}
+                    pattern={walkthroughAmountPattern(walkthroughExponent)}
+                    value={walkthroughAmount}
+                    onChange={event => setWalkthroughAmount(event.currentTarget.value)}
+                    autoComplete="off"
+                    required
+                  />
                 </label>
-                <button className="button primary" disabled={busy || sourceCandidates.length === 0}>
+                <button className="button primary" disabled={busy || !selectedWalkthroughSource || walkthroughExponent === undefined}>
                   Prepare walkthrough
                 </button>
               </form>
               {sourceCandidates.length === 0 &&
                 <p className="error">Two active owned Sandbox accounts in the same currency are required.</p>}
+              {selectedWalkthroughSource && walkthroughExponent === undefined &&
+                <p className="error">{selectedWalkthroughSource.currency} has no reviewed minor-unit precision for this walkthrough.</p>}
             </div>
           : record.fundingStatus !== 'MATCHED'
             ? <div className="runner-step">
                 <p className="eyebrow">Step 2</p>
                 <h3>Create and match the Sandbox test credit</h3>
                 <p>
-                  Create a clearly labelled {money(expectation.amountMinor, expectation.currency)} Sandbox credit,
+                  Create a clearly labelled {caseMoney(expectation.amountMinor, expectation.currency, expectation.exponent)} Sandbox credit,
                   then match it to this case.
                 </p>
                 <button className="button primary" disabled={busy} onClick={() => void perform(
@@ -656,7 +814,7 @@ function SandboxCaseRunner({
                         </select>
                       </label>
                       <label>Exact payout
-                        <input value={money(expectation.amountMinor, expectation.currency)} readOnly />
+                        <input value={caseMoney(expectation.amountMinor, expectation.currency, expectation.exponent)} readOnly />
                       </label>
                       <button className="button primary" disabled={busy || payoutTargets.length === 0}>Create plan</button>
                     </form>
@@ -694,7 +852,335 @@ function SandboxCaseRunner({
                           )}>Reconcile Sandbox result</button>
                           <a className="button help-link" href={`/v1/cases/${record.id}/evidence`} download>Download current evidence</a>
                         </div>
-                      </div>}
+                        </div>}
+    </section>
+  </section>;
+}
+
+function CasePackageOverview({ record }: { record: CaseRecord }) {
+  const submission = record.submissions?.at(-1);
+  const artifacts = record.artifacts ?? [];
+  const cleanArtifacts = artifacts.filter(item => item.scanStatus === 'CLEAN');
+  const profile = describePackageProfile(
+    record.packageHealth?.packageProfile ??
+    record.packageHealth?.profile ??
+    record.packageProfile ??
+    submission?.packageProfile ??
+    submission?.profile ??
+    submission?.format
+  );
+  const packageState = record.packageHealth?.status ?? record.packageHealth?.state ?? submission?.state;
+  const scanStatus = record.packageHealth?.scanStatus ?? record.packageHealth?.scanner ?? submission?.scanner;
+
+  return <>
+    <section className="case-detail-section" aria-labelledby="package-health-heading">
+      <div className="detail-section-heading">
+        <div>
+          <p className="eyebrow">Diagnostic intake</p>
+          <h3 id="package-health-heading">Submission &amp; package health</h3>
+        </div>
+      </div>
+      <div className="case-detail-grid">
+        <div className="detail-fact">
+          <span>Latest submission</span>
+          <strong>{submission ? <code>{submission.id}</code> : 'Not reported'}</strong>
+          <small>{submission?.receivedAt ? `Received ${formatDate(submission.receivedAt)}` : 'No submission timestamp reported.'}</small>
+        </div>
+        <div className="detail-fact">
+          <span>Profile</span>
+          <strong>{profile}</strong>
+          <small>{submission?.version ? `Submission version ${submission.version}` : 'Profile classification is shown when available.'}</small>
+        </div>
+        <div className="detail-fact">
+          <span>Package health</span>
+          <strong>{displayCaseState(packageState, 'Not reported')}</strong>
+          <small>{record.packageHealth?.message ?? 'Archive safety and validation state.'}</small>
+        </div>
+        <div className="detail-fact">
+          <span>Scan status</span>
+          <strong>{displayCaseState(scanStatus, 'Not reported')}</strong>
+          <small>Only clean artifacts are listed below.</small>
+        </div>
+        <div className="detail-fact">
+          <span>Package digest</span>
+          <strong><code>{shortDigest(submission?.packageSha256)}</code></strong>
+          <small>Short identifier for the encrypted original package.</small>
+        </div>
+        {record.fundingExpectation && <div className="detail-fact">
+          <span>Expected funding</span>
+          <strong>{caseMoney(
+            record.fundingExpectation.amountMinor,
+            record.fundingExpectation.currency,
+            record.fundingExpectation.exponent
+          )}</strong>
+          <small>Declared amount, pending broker confirmation and observed funding.</small>
+        </div>}
+      </div>
+    </section>
+    <section className="case-detail-section" aria-labelledby="artifact-inventory-heading">
+      <div className="detail-section-heading">
+        <div>
+          <p className="eyebrow">Safe metadata</p>
+          <h3 id="artifact-inventory-heading">Clean artifact inventory</h3>
+        </div>
+        <span className="pill clear">{cleanArtifacts.length} clean</span>
+      </div>
+      {cleanArtifacts.length === 0
+        ? <p className="muted">
+            {artifacts.length === 0
+              ? 'No clean artifact inventory has been reported for this case.'
+              : 'Artifact inventory remains unavailable until the corresponding artifact scan is clean.'}
+          </p>
+        : <div className="table-wrap"><table className="artifact-table"><thead><tr>
+            <th>Path</th><th>Type</th><th>Size</th><th>Scan</th><th>Digest</th>
+          </tr></thead><tbody>{cleanArtifacts.map((artifact, index) => <tr key={`${artifact.id ?? artifact.sha256 ?? artifact.path}-${index}`}>
+            <td className="artifact-path"><code>{artifact.path}</code></td>
+            <td>{artifact.mediaType ?? 'Not reported'}</td>
+            <td>{formatByteLength(artifact.byteLength)}</td>
+            <td><span className="pill clean">Clean</span></td>
+            <td><code>{shortDigest(artifact.sha256)}</code></td>
+          </tr>)}</tbody></table></div>}
+      <p className="inventory-note">Artifact contents are never displayed in this console.</p>
+    </section>
+  </>;
+}
+
+function CaseFindings({ findings }: { findings: CaseRiskFinding[] }) {
+  return <section className="case-detail-section" aria-labelledby="case-findings-heading">
+    <div className="detail-section-heading">
+      <div>
+        <p className="eyebrow">Review queue</p>
+        <h3 id="case-findings-heading">Actionable findings</h3>
+      </div>
+      <span className="pill">{findings.length} total</span>
+    </div>
+    {findings.length === 0
+      ? <p className="muted">No machine or broker findings have been reported for this case.</p>
+      : <div className="case-findings">{findings.map((finding, index) => {
+          const resolved = Boolean(finding.resolvedAt);
+          return <article className={`case-finding ${resolved ? 'resolved' : 'open'}`} key={finding.id ?? `${finding.code}-${index}`}>
+            <div className="finding-heading">
+              <div>
+                <p className="eyebrow">{plainAction(finding.code)}</p>
+                <h4>{resolved ? 'Resolved finding' : 'Open finding'}</h4>
+              </div>
+              <span className={`pill ${resolved ? 'clear' : finding.hardBlock ? 'blocked' : 'warning'}`}>
+                {resolved ? 'Resolved' : 'Open'}
+              </span>
+            </div>
+            <p><strong>Message:</strong> {finding.message || 'No safe finding message was reported.'}</p>
+            <p><strong>Needed next:</strong> {finding.neededNext || 'Review this finding with the broker.'}</p>
+            {finding.resolvedAt && <small>Resolved {formatDate(finding.resolvedAt)}{finding.resolvedByAmendmentId ? ' by amendment' : ''}.</small>}
+          </article>;
+        })}</div>}
+  </section>;
+}
+
+function BrokerCaseReview({
+  record,
+  accounts,
+  session,
+  busy,
+  onAction
+}: {
+  record: CaseRecord;
+  accounts: Account[];
+  session: Session;
+  busy: boolean;
+  onAction: (action: () => Promise<unknown>, message: string) => Promise<void>;
+}) {
+  const latestSubmission = record.submissions?.at(-1);
+  const cleanGenericPackage = latestSubmission?.format === 'generic-compatibility/1.0' &&
+    latestSubmission.state === 'VALIDATED' && latestSubmission.scanner === 'CLEAN';
+  const [destinationAccountId, setDestinationAccountId] = useState('');
+  const [formError, setFormError] = useState('');
+  const destinationAccount = accounts.find(account => account.id === destinationAccountId);
+  const destinationExponent = destinationAccount
+    ? sandboxWalkthroughCurrencyExponent(destinationAccount.currency)
+    : undefined;
+  const genericFindingCodes = new Set([
+    'MANIFEST_MISSING',
+    'MANIFEST_PARSE_FAILED',
+    'UNSUPPORTED_PACKAGE_PROFILE',
+    'UNSUPPORTED_ARTIFACT_TYPE',
+    'REQUIRED_TRANSACTION_FIELD_NOT_FOUND'
+  ]);
+  const resolvesGenericFindings = (record.riskFindings ?? [])
+    .filter(finding => !finding.resolvedAt && genericFindingCodes.has(finding.code))
+    .map(finding => finding.code);
+
+  useEffect(() => {
+    const firstCompatible = accounts.find(account =>
+      account.state === 'active' && sandboxWalkthroughCurrencyExponent(account.currency) !== undefined
+    );
+    setDestinationAccountId(current =>
+      accounts.some(account => account.id === current) ? current : firstCompatible?.id ?? '');
+  }, [accounts, record.id]);
+
+  async function confirmIncomingCredit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const account = accounts.find(item => item.id === String(data.get('destinationAccountId') ?? ''));
+    const exponent = account ? sandboxWalkthroughCurrencyExponent(account.currency) : undefined;
+    const amountMinor = exponent === undefined ? undefined : parseDecimalToMinor(data.get('amount'), exponent);
+    if (!account || exponent === undefined || amountMinor === undefined) {
+      setFormError('Choose an active Sandbox destination account and enter a positive amount at that currency’s supported precision.');
+      return;
+    }
+    setFormError('');
+    await onAction(() => api(`/v1/cases/${record.id}/amendments`, {
+      method: 'POST',
+      body: JSON.stringify({
+        reason: data.get('reason'),
+        source: data.get('source'),
+        claims: [
+          {
+            path: 'expectedIncomingCredit',
+            value: {
+              amountMinor,
+              currency: account.currency,
+              exponent,
+              reference: data.get('reference'),
+              destinationAccountId: account.id,
+              investorName: data.get('investorLegalName')
+            }
+          },
+          { path: 'investor.legalName', value: data.get('investorLegalName') },
+          { path: 'beneficiary.legalName', value: data.get('beneficiaryLegalName') },
+          { path: 'authority.reference', value: data.get('authorityReference') },
+          { path: 'purpose', value: data.get('purpose') }
+        ],
+        resolvesFindingCodes: resolvesGenericFindings,
+        evidenceRefs: [data.get('evidenceRef')]
+      })
+    }, session.csrfToken), 'Broker-confirmed incoming funding details recorded; independently observe the provider credit next.');
+  }
+
+  async function addReview(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    await onAction(() => api(`/v1/cases/${record.id}/reviews`, {
+      method: 'POST',
+      body: JSON.stringify({
+        category: data.get('category'),
+        outcome: data.get('outcome'),
+        note: data.get('note'),
+        evidenceRefs: [data.get('evidenceRef')]
+      })
+    }, session.csrfToken), 'Broker review finding recorded.');
+  }
+
+  async function recordDecision(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    await onAction(() => api(`/v1/cases/${record.id}/decisions`, {
+      method: 'POST',
+      body: JSON.stringify({ outcome: data.get('outcome'), reason: data.get('reason') })
+    }, session.csrfToken), 'Broker case decision recorded.');
+  }
+
+  return <section className="case-detail-section broker-case-review" aria-labelledby="broker-case-review-heading">
+    <div className="detail-section-heading">
+      <div>
+        <p className="eyebrow">Human review</p>
+        <h3 id="broker-case-review-heading">Broker review &amp; amendments</h3>
+      </div>
+      {record.decision && <span className={`pill ${record.decision.outcome === 'APPROVE' ? 'approved' : 'warning'}`}>
+        {plainAction(record.decision.outcome)}
+      </span>}
+    </div>
+    <p className="inventory-note">
+      Confirmed case facts are entered as cited amendments. The diagnostic ZIP remains evidence only; this form never treats it as transaction-ready instructions.
+    </p>
+    {formError && <p className="error" role="alert">{formError}</p>}
+
+    <div className="broker-review-history">
+      <div>
+        <strong>Claims recorded</strong>
+        <small>{record.claims?.length ?? 0} metadata claim{(record.claims?.length ?? 0) === 1 ? '' : 's'} · values remain in the protected case record.</small>
+      </div>
+      <div>
+        <strong>Amendments</strong>
+        <small>{record.amendments?.length ?? 0} cited amendment{(record.amendments?.length ?? 0) === 1 ? '' : 's'}</small>
+      </div>
+      <div>
+        <strong>Broker findings</strong>
+        <small>{record.brokerFindings?.length ?? 0} review finding{(record.brokerFindings?.length ?? 0) === 1 ? '' : 's'}</small>
+      </div>
+    </div>
+
+    {(record.claims?.length ?? 0) > 0 && <details>
+      <summary>View submitted and amended claim values</summary>
+      <ul>
+        {record.claims?.map(claim => <li key={claim.id ?? `${claim.path}-${claim.recordedAt}`}>
+          <code>{claim.path}</code> · {plainAction(claim.source ?? 'recorded')} · {claimValueSummary(claim.value)}
+        </li>)}
+      </ul>
+    </details>}
+
+    {(record.amendments?.length ?? 0) > 0 && <details>
+      <summary>View amendment history</summary>
+      <ul>
+        {record.amendments?.map(amendment => <li key={amendment.id ?? `${amendment.version}-${amendment.recordedAt}`}>
+          <strong>{amendment.source}</strong> · {amendment.reason}
+          {amendment.resolvesFindingCodes?.length ? ` · resolves ${amendment.resolvesFindingCodes.map(plainAction).join(', ')}` : ''}
+        </li>)}
+      </ul>
+    </details>}
+    {(record.brokerFindings?.length ?? 0) > 0 && <details>
+      <summary>View broker review history</summary>
+      <ul>
+        {record.brokerFindings?.map(finding => <li key={finding.id ?? `${finding.category}-${finding.recordedAt}`}>
+          <strong>{plainAction(finding.outcome)}</strong> · {finding.category}: {finding.note}
+        </li>)}
+      </ul>
+    </details>}
+
+    {session.role !== 'admin'
+      ? <p className="muted">Read-only accounts can review cited case history but cannot amend, review, or decide a case.</p>
+      : <div className="broker-review-actions">
+          {cleanGenericPackage && !record.fundingExpectation && <form className="broker-confirm-form" onSubmit={confirmIncomingCredit}>
+            <div className="detail-section-heading">
+              <div><p className="eyebrow">Clean generic ZIP</p><h4>Confirm real-case inputs</h4></div>
+            </div>
+            <p className="muted">Use independently verified broker facts; cite the review evidence reference below.</p>
+            <label>Confirmed destination Sandbox account
+              <select name="destinationAccountId" value={destinationAccountId} onChange={event => setDestinationAccountId(event.currentTarget.value)} required>
+                {accounts.filter(account => account.state === 'active').map(account =>
+                  <option key={account.id} value={account.id}>{account.name} · {account.currency}</option>
+                )}
+              </select>
+            </label>
+            <label>Confirmed incoming amount
+              <input name="amount" inputMode={destinationExponent === 0 ? 'numeric' : 'decimal'} pattern={walkthroughAmountPattern(destinationExponent)} required />
+            </label>
+            <label>Confirmed reference<input name="reference" maxLength={140} required /></label>
+            <label>Investor legal name<input name="investorLegalName" maxLength={200} required /></label>
+            <label>Beneficiary legal name<input name="beneficiaryLegalName" maxLength={200} required /></label>
+            <label>Authority reference<input name="authorityReference" maxLength={200} required /></label>
+            <label>Purpose<input name="purpose" maxLength={500} required /></label>
+            <label>Evidence reference<input name="evidenceRef" maxLength={300} required /></label>
+            <label>Amendment source<input name="source" defaultValue="Designated broker review" maxLength={300} required /></label>
+            <label>Reason<input name="reason" defaultValue="Broker confirmed full-value Sandbox case inputs from cited review evidence." maxLength={500} required /></label>
+            <button className="button primary" disabled={busy || !destinationAccount || destinationExponent === undefined}>Record cited incoming funding amendment</button>
+          </form>}
+
+          <form className="broker-review-form" onSubmit={addReview}>
+            <div className="detail-section-heading"><div><p className="eyebrow">Review record</p><h4>Add broker finding</h4></div></div>
+            <label>Category<input name="category" maxLength={100} placeholder="Identity, authority, payout structure…" required /></label>
+            <label>Outcome<select name="outcome" defaultValue="PASS"><option value="PASS">Pass</option><option value="CONCERN">Concern</option><option value="BLOCK">Block</option></select></label>
+            <label>Review note<input name="note" maxLength={1000} required /></label>
+            <label>Evidence reference<input name="evidenceRef" maxLength={300} required /></label>
+            <button className="button ghost" disabled={busy}>Record broker finding</button>
+          </form>
+
+          {!['CLOSED', 'REJECTED'].includes(record.caseStatus) && <form className="broker-decision-form" onSubmit={recordDecision}>
+            <div className="detail-section-heading"><div><p className="eyebrow">Decision</p><h4>Record broker decision</h4></div></div>
+            <label>Outcome<select name="outcome" defaultValue="REQUEST_INFORMATION"><option value="REQUEST_INFORMATION">Request information</option><option value="REJECT">Reject</option><option value="APPROVE">Approve after matched funding</option></select></label>
+            <label>Decision reason<input name="reason" maxLength={1000} required /></label>
+            <button className="button ghost" disabled={busy}>Record decision</button>
+          </form>}
+        </div>}
   </section>;
 }
 
@@ -793,6 +1279,83 @@ function TransferTable({
     const canReconcile = transfer.id && ['submitted', 'pending'].includes(transfer.state);
     return <tr key={transfer.id ?? transfer.transferRef ?? index}><td><code>{viewer ? transfer.transferRef : transfer.id?.slice(0, 8)}</code></td><td>{money(amount, currency)}</td><td><span className={`pill ${transfer.state}`}>{transfer.state}</span></td><td>{formatDate(transfer.updatedAt)}</td>{onReconcile && <td>{canReconcile ? <button className="button ghost" onClick={() => void onReconcile(transfer.id!)}>Refresh status</button> : '—'}</td>}</tr>;
   })}</tbody></table></div>;
+}
+
+export function parseDecimalToMinor(value: FormDataEntryValue | null, exponent: number): number | undefined {
+  if (typeof value !== 'string' || !Number.isInteger(exponent) || exponent < 0 || exponent > 9) return undefined;
+  const match = /^(\d+)(?:\.(\d*))?$/.exec(value.trim());
+  if (!match) return undefined;
+  const whole = match[1] ?? '';
+  const fraction = match[2] ?? '';
+  if (fraction.length > exponent && /[1-9]/.test(fraction.slice(exponent))) return undefined;
+  const minor = BigInt(whole) * (10n ** BigInt(exponent)) + BigInt(fraction.slice(0, exponent).padEnd(exponent, '0') || '0');
+  if (minor < 1n || minor > BigInt(Number.MAX_SAFE_INTEGER)) return undefined;
+  return Number(minor);
+}
+
+export function sandboxWalkthroughCurrencyExponent(currency: string): number | undefined {
+  return SANDBOX_WALKTHROUGH_CURRENCY_EXPONENTS[currency.trim().toUpperCase()];
+}
+
+function defaultWalkthroughAmount(exponent: number) {
+  return exponent === 0 ? '10' : `10.${'0'.repeat(exponent)}`;
+}
+
+function walkthroughAmountPattern(exponent: number | undefined) {
+  if (exponent === undefined) return '[0-9]+';
+  return exponent === 0 ? '[0-9]+' : `[0-9]+([.][0-9]{0,${exponent}})?`;
+}
+
+function caseMoney(amountMinor: number, currency: string, exponent: number) {
+  return `${currency} ${minorUnitsToDecimal(amountMinor, exponent)}`;
+}
+
+function claimValueSummary(value: unknown) {
+  if (typeof value === 'string') return value.length > 240 ? `${value.slice(0, 237)}…` : value;
+  if (typeof value === 'number' || typeof value === 'boolean' || value === null) return String(value);
+  try {
+    const serialized = JSON.stringify(value);
+    return serialized.length > 240 ? `${serialized.slice(0, 237)}…` : serialized;
+  } catch {
+    return 'Structured value unavailable';
+  }
+}
+
+function minorUnitsToDecimal(amountMinor: number, exponent: number) {
+  if (!Number.isSafeInteger(amountMinor) || !Number.isInteger(exponent) || exponent < 0 || exponent > 9) {
+    return String(amountMinor);
+  }
+  const sign = amountMinor < 0 ? '-' : '';
+  const digits = String(Math.abs(amountMinor));
+  if (exponent === 0) return `${sign}${groupDigits(digits)}`;
+  const padded = digits.padStart(exponent + 1, '0');
+  return `${sign}${groupDigits(padded.slice(0, -exponent))}.${padded.slice(-exponent)}`;
+}
+
+function describePackageProfile(profile: CasePackageProfile | string | undefined) {
+  if (!profile) return 'Not classified';
+  if (typeof profile === 'string') return profile;
+  const name = profile.label ?? profile.name ?? profile.id ?? 'Not classified';
+  return profile.version ? `${name} · v${profile.version}` : name;
+}
+
+function displayCaseState(value: string | undefined, fallback: string) {
+  return value ? plainAction(value.toLowerCase()) : fallback;
+}
+
+function formatByteLength(value: number | undefined) {
+  return value !== undefined && Number.isSafeInteger(value) && value >= 0
+    ? `${groupDigits(String(value))} B`
+    : '—';
+}
+
+function shortDigest(value: string | undefined) {
+  if (!value) return '—';
+  return value.length > 16 ? `${value.slice(0, 12)}…${value.slice(-4)}` : value;
+}
+
+function groupDigits(value: string) {
+  return value.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 function formatDate(value: string) {

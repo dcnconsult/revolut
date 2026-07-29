@@ -45,7 +45,7 @@
         <section id="start" data-guide-section data-search="open login sign in begin access tunnel browser broker administrator admin">
           <p class="eyebrow">Welcome</p>
           <h2>Get ready to begin</h2>
-          <p>This guide is for the broker who reviews the funding request and records the final human decision. Your access level may appear as <strong>Administrator</strong> in the application.</p>
+          <p>This guide is for the broker who reviews a client case and records the final human decision. Your access level may appear as <strong>Administrator</strong> in the application.</p>
           <div class="callout safe"><strong>First, confirm the yellow Sandbox banner.</strong> You are in the right place when it says “REVOLUT SANDBOX · NO LIVE DATA.” If the banner is missing or different, pause and contact your administrator.</div>
           <p>These opening checks take less than a minute:</p>
           <ol class="steps">
@@ -56,6 +56,7 @@
             <li><span>5</span><div>Check the <strong>Backup</strong> card. <strong>Fresh</strong> is required before you authorize a funding plan.</div></li>
           </ol>
           <p class="next"><strong>You are ready when:</strong> you are signed in, the environment is Sandbox, Operations is Clear, and Backup is Fresh.</p>
+          <div class="callout note"><strong>Sandbox means test-only.</strong> Do not use live money. Client case information may be used only when the named pilot data-handling approval allows it.</div>
         </section>
 
         <section id="daily" data-guide-section data-search="daily health operations backup clear fresh status check">
@@ -75,48 +76,50 @@
         <section id="case" data-guide-section data-search="case workflow upload zip package inbox nine steps">
           <p class="eyebrow">The broker workflow</p>
           <h2>Move through the case in order</h2>
-          <p>The case moves from intake to broker review, decision, execution, and closeout. The application helps organize the evidence and checks; you make the broker decision.</p>
-          <div class="callout note"><strong>Important distinction:</strong> an uploaded package creates a case record. It is not proof of incoming funds and it does not authorize a payout.</div>
+          <p>The case moves from receiving a file to broker review, decision, Sandbox testing, and closeout. The application keeps the record organised; you make the broker decision.</p>
+          <div class="callout note"><strong>Important distinction:</strong> an uploaded ZIP creates a case record. It is not proof of incoming funds and it does not authorize a payout.</div>
           <p><a href="./workflows.html">Open the high-level workflow map</a> for a one-page visual view.</p>
           <ol class="steps compact">
             <li><span>1</span><div><strong>Receive the case.</strong> Choose the private ZIP and select <em>Upload to quarantine</em> once.</div></li>
-            <li><span>2</span><div><strong>Review package health.</strong> Wait for scanning and validation to finish.</div></li>
-            <li><span>3</span><div><strong>Complete the broker review.</strong> Compare submitted claims, machine findings, and your professional review.</div></li>
-            <li><span>4</span><div><strong>Add cited evidence.</strong> If a claim needs correction, record the reason, source, and evidence reference.</div></li>
-            <li><span>5</span><div><strong>Confirm the funding receipt.</strong> Match the expected receipt to an independent provider observation.</div></li>
+            <li><span>2</span><div><strong>Check the file.</strong> Wait for the safety check, then read the safe file list and any questions.</div></li>
+            <li><span>3</span><div><strong>Complete the broker review.</strong> Compare submitted case details, workspace findings, and your professional review.</div></li>
+            <li><span>4</span><div><strong>Record checked details.</strong> If something needs correction, record what changed, where you checked it, and why.</div></li>
+            <li><span>5</span><div><strong>Confirm the Sandbox test receipt.</strong> Match the expected receipt to a result read from Revolut Sandbox.</div></li>
             <li><span>6</span><div><strong>Record the broker decision.</strong> Approve, request information, or reject based on the evidence and required risk areas.</div></li>
             <li><span>7</span><div><strong>Confirm payouts and fees.</strong> Customer payouts, broker fee, provider fees, reserve, and refund must equal the matched receipt.</div></li>
             <li><span>8</span><div><strong>Authorize and execute.</strong> Confirm the exact funding plan, then complete the separate authorization and execution checks.</div></li>
-            <li><span>9</span><div><strong>Reconcile and close.</strong> Confirm final provider results and retain the signed evidence bundle.</div></li>
+            <li><span>9</span><div><strong>Reconcile and close.</strong> Check the final result reported by Revolut Sandbox and retain the signed case record.</div></li>
           </ol>
+          <div class="callout note"><strong>A clean ZIP can still be new to the workspace.</strong> If its layout is not recognised, read the safe file list and use <strong>Confirm real-case inputs</strong> for facts you checked independently. Do not guess from the file.</div>
         </section>
 
         <section id="findings" data-guide-section data-search="finding hard block amendment evidence correction cited information required">
           <p class="eyebrow">Evidence review</p>
-          <h2>Clear findings with cited evidence</h2>
+          <h2>Respond to findings with checked information</h2>
           <p>A finding tells you what passed, what needs attention, or what prevents the case from moving forward.</p>
           <ol>
             <li>Read each finding and the related “what is needed next” instruction.</li>
-            <li>Obtain new evidence from an approved source.</li>
-            <li>Add an amendment with the corrected value, reason, source, and evidence reference.</li>
-            <li>Confirm the machine review runs again and read the updated result.</li>
+            <li>Obtain a supporting record from an approved source.</li>
+            <li>Add a recorded correction with the changed detail, reason, source, and where you checked it.</li>
+            <li>Read the updated result.</li>
             <li>If a hard block remains, request the needed information or reject the case. A hard block cannot be accepted as risk.</li>
           </ol>
-          <div class="callout note"><strong>The history stays clear:</strong> the original claim remains in the record, and your amendment shows what changed and why.</div>
+          <div class="callout note"><strong>The history stays clear:</strong> the original submitted detail remains in the record, and your recorded correction shows what changed and why.</div>
         </section>
 
         <section id="funding" data-guide-section data-search="funding match incoming credit top up simulation receipt possible unmatched reversed">
           <p class="eyebrow">Independent funding evidence</p>
-          <h2>Confirm the matched funding receipt</h2>
-          <p>The funding receipt must come from a provider observation, separate from the submitted package.</p>
+          <h2>Confirm the matching Sandbox test receipt</h2>
+          <p>The matching test receipt must be read from Revolut Sandbox, separately from the submitted ZIP.</p>
           <ol>
-            <li>Confirm all non-funding hard blocks are resolved.</li>
-            <li>Select the funding refresh action to read the latest provider observations.</li>
-            <li>For training, the clearly labeled Sandbox simulation option may be used. Record it as a simulation, not as real settlement.</li>
-            <li>Confirm exactly one credit matches the provider account, currency, amount, and payment reference.</li>
+            <li>Confirm all other stop reasons are resolved.</li>
+            <li>Select <strong>Create and match test credit</strong> only when the case is ready for that Sandbox step.</li>
+            <li>Record the clearly labelled Sandbox test credit as a simulation, not real settlement.</li>
+            <li>Confirm exactly one credit matches the Sandbox account, currency, full amount, and payment reference.</li>
             <li>Move forward when Funding says <strong>Matched</strong>.</li>
           </ol>
-          <div class="callout stop"><strong>Pause the case</strong> when Funding says Possible Match, Unmatched, Awaiting Funds, or Reversed. The receipt is not yet confirmed.</div>
+          <div class="callout note"><strong>Full amount, test-only:</strong> a broker-confirmed case uses its full confirmed amount within the approved Sandbox case limit. This is still a Sandbox test, never a live payment. If Sandbox limits or rejects it, keep that result in the case. Do not lower the amount yourself.</div>
+          <div class="callout stop"><strong>Pause the case</strong> when Funding says Possible Match, Unmatched, Awaiting Funds, Reversed, or Unclear. The receipt is not yet confirmed.</div>
         </section>
 
         <section id="decision" data-guide-section data-search="approve reject request information decision risk low">
@@ -134,7 +137,7 @@
         <section id="plan" data-guide-section data-search="plan allocation payout broker fee provider reserve refund exact balance beneficiary">
           <p class="eyebrow">Funding plan review</p>
           <h2>Confirm payouts, fees, reserve, and refund</h2>
-          <p>The funding plan is the exact use of the matched receipt. Review every line, including small fees.</p>
+          <p>The payment plan is the exact use of the matching Sandbox test receipt. Review every line, including small fees.</p>
           <ol>
             <li>Confirm the receipt amount and currency match the observed credit.</li>
             <li>Confirm each beneficiary name and payment destination.</li>
@@ -149,26 +152,25 @@
         <section id="execute" data-guide-section data-search="authorize execute password mfa phrase sequential payment pending ambiguous">
           <p class="eyebrow">Final confirmation</p>
           <h2>Authorize the approved plan, then execute</h2>
-          <p>Authorization applies to one exact version of the funding plan. Take your time and complete each confirmation once.</p>
+          <p>Authorization applies to one exact version of the payment plan. Take your time and complete each confirmation once.</p>
           <ol>
-            <li>Read the plan version and digest shown by the application.</li>
+            <li>Read the plan version and short plan reference shown by the application.</li>
             <li>Confirm no evidence, beneficiary, allocation, funding, or provider detail changed.</li>
-            <li>Type the exact authorization phrase shown.</li>
             <li>Enter your password and a fresh authenticator code.</li>
             <li>Select Authorize once.</li>
             <li>Review the plan again before execution.</li>
-            <li>Enter the separate execution phrase, password, and fresh code.</li>
+            <li>Enter your password and a fresh code for the separate execution check.</li>
             <li>Select Execute once, then allow the provider result to return.</li>
           </ol>
-          <div class="callout stop"><strong>If the result is slow, pending, or unclear, pause here.</strong> Reconcile the existing request before taking any further action; do not select Execute again.</div>
+          <div class="callout stop"><strong>If the result is slow, pending, or unclear, pause here.</strong> Refresh or reconcile the existing request before taking any further action; do not select Execute again.</div>
         </section>
 
         <section id="reconcile" data-guide-section data-search="reconcile export evidence closed completed partial final result download">
           <p class="eyebrow">Case closeout</p>
-          <h2>Confirm provider results and close the case</h2>
-          <p>Reconciliation confirms what the provider actually completed before the case is closed.</p>
+          <h2>Confirm the Sandbox result and close the case</h2>
+          <p><strong>Reconcile</strong> checks what Revolut Sandbox actually completed before the case is closed. It checks the existing test; it does not send another payment.</p>
           <ol>
-            <li>Select Reconcile for non-final provider results.</li>
+            <li>Select Reconcile only after a plan was executed and the result is not final.</li>
             <li>Confirm every submitted payout is Completed.</li>
             <li>Confirm no later payout was submitted after a failed, pending, reverted, declined, or unclear result.</li>
             <li>Continue reconciliation until the case says Reconciled. If it cannot reach a final state, pause and ask for support.</li>
@@ -186,14 +188,15 @@
               <thead><tr><th>Status</th><th>Plain meaning</th><th>Your action</th></tr></thead>
               <tbody>
                 <tr><td>Quarantined</td><td>The package has not passed private safety scanning.</td><td>Wait. Do not open files.</td></tr>
-                <tr><td>Intake Hold</td><td>Important package or evidence problems exist.</td><td>Read “what is needed next.”</td></tr>
-                <tr><td>Awaiting Broker</td><td>The case is ready for your broker review.</td><td>Review claims, findings, and evidence.</td></tr>
-                <tr><td>Information Required</td><td>The case needs more evidence.</td><td>Request and cite new evidence.</td></tr>
+                <tr><td>Intake Hold</td><td>The ZIP may be safe, but details are missing or its layout is not yet recognised.</td><td>Read the safe file list and “what is needed next.”</td></tr>
+                <tr><td>Awaiting Broker</td><td>The case is ready for your broker review.</td><td>Review submitted details, findings, and supporting records.</td></tr>
+                <tr><td>Information Required</td><td>The case needs more checked information.</td><td>Request the named information and record where you checked it.</td></tr>
                 <tr><td>Approved</td><td>The broker decision passed the current checks.</td><td>Review the exact funding plan.</td></tr>
-                <tr><td>Matched</td><td>Exactly one incoming provider credit matches.</td><td>Continue if other checks pass.</td></tr>
+                <tr><td>Matched</td><td>Exactly one Sandbox test credit matches.</td><td>Continue if other checks pass.</td></tr>
                 <tr><td>Possible Match</td><td>More than one credit may match.</td><td>Pause and investigate.</td></tr>
-                <tr><td>Reversed</td><td>Previously matched funding no longer qualifies.</td><td>Pause; the prior authorization is invalid.</td></tr>
+                <tr><td>Reversed</td><td>A Sandbox test credit that matched earlier no longer qualifies.</td><td>Pause; the prior authorization is invalid.</td></tr>
                 <tr><td>Awaiting Authorization</td><td>A plan exists but is not authorized.</td><td>Review every plan line.</td></tr>
+                <tr><td>Pending or unclear</td><td>Sandbox has not given a final answer.</td><td>Reconcile the existing request; do not send another one.</td></tr>
                 <tr><td>Partial</td><td>Some payouts completed and others did not.</td><td>Reconcile the existing requests and ask for support.</td></tr>
                 <tr><td>Blocked</td><td>Execution cannot safely continue.</td><td>Pause and contact the administrator.</td></tr>
                 <tr><td>Reconciled</td><td>All submitted payouts have final confirmed results.</td><td>Export evidence and close.</td></tr>
@@ -229,13 +232,14 @@ Action taken: Stopped without retrying</pre>
           <h2>Protect the client, your account, and the case record</h2>
           <p>These boundaries keep the broker review reliable and preserve a clear audit history.</p>
           <ul class="check-list">
-            <li>Use Sandbox identities and low-value test amounts only.</li>
+            <li>Use Revolut Sandbox only. The small Direct Transfer Test is a connection check; a broker-confirmed case may use its full confirmed test amount within the approved Sandbox case limit. It never moves live money.</li>
+            <li>Use client case information only after the named pilot data-handling and retention approval is confirmed.</li>
             <li>Use only your own Sandbox credentials; do not use investor banking credentials.</li>
-            <li>Confirm incoming funds through provider observations, not through an uploaded package.</li>
+            <li>Confirm an incoming test receipt through a result read from Revolut Sandbox, not through an uploaded ZIP.</li>
             <li>Use only an existing, verified Sandbox counterparty or owned account.</li>
             <li>Keep passwords, MFA and recovery codes, tokens, cookies, and secret files private.</li>
-            <li>Resolve a warning with cited evidence or the appropriate case decision; do not change a case simply to remove the warning.</li>
-            <li>Reconcile a payment with an unclear outcome instead of retrying it.</li>
+            <li>Resolve a warning with a supporting record or the appropriate case decision; do not change a case simply to remove the warning.</li>
+            <li>Refresh or reconcile a test with an unclear outcome instead of retrying it.</li>
             <li>Use this application only for Sandbox cases and test money.</li>
           </ul>
         </section>
@@ -244,21 +248,22 @@ Action taken: Stopped without retrying</pre>
           <p class="eyebrow">Broker terminology in plain language</p>
           <h2>Broker glossary</h2>
           <dl>
-            <dt>Broker review</dt><dd>Your documented professional review of the submitted claims, findings, and supporting evidence.</dd>
+            <dt>Broker review</dt><dd>Your documented professional review of submitted case details, findings, and supporting records.</dd>
             <dt>Case</dt><dd>The complete review record for one funding request.</dd>
-            <dt>Claim</dt><dd>Something the sender says is true. A claim is not proof.</dd>
-            <dt>Evidence</dt><dd>A cited record used to support or correct a claim.</dd>
+            <dt>Submitted case detail</dt><dd>Something the sender says is true. It is not proof.</dd>
+            <dt>Safe file list</dt><dd>The protected list of clean files in the ZIP. It helps you review a new or unfamiliar layout without treating it as payment instructions.</dd>
+            <dt>Supporting record</dt><dd>A record you checked independently to support or correct a case detail.</dd>
             <dt>Finding</dt><dd>A problem, warning, or passed check produced during review.</dd>
-            <dt>Hard block</dt><dd>A concern that must be cleared with evidence or lead to rejection. It cannot be accepted as risk.</dd>
-            <dt>Amendment</dt><dd>A dated correction that leaves the original claim visible.</dd>
+            <dt>Hard block</dt><dd>A concern that must be cleared with a supporting record or lead to rejection. It cannot be accepted as risk.</dd>
+            <dt>Recorded correction</dt><dd>A dated correction that leaves the original submitted detail visible.</dd>
             <dt>Beneficiary</dt><dd>The person or organization intended to receive a payout.</dd>
             <dt>Counterparty</dt><dd>A payment recipient already verified in Revolut Sandbox.</dd>
-            <dt>Provider observation</dt><dd>Transaction information independently read from Revolut Sandbox.</dd>
-            <dt>Matched receipt</dt><dd>Exactly one provider credit that matches the expected account, currency, amount, and reference.</dd>
-            <dt>Funding plan</dt><dd>The exact list of customer payouts, broker fee, provider fees, reserve, and refund tied to one matched receipt.</dd>
-            <dt>Digest</dt><dd>A short fingerprint used to prove the plan did not change.</dd>
-            <dt>Reconcile</dt><dd>Ask the provider for the latest result and compare it with the case record.</dd>
-            <dt>Signed evidence bundle</dt><dd>The downloadable case history retained after reconciliation and closeout.</dd>
+            <dt>Sandbox result</dt><dd>Transaction information independently read from Revolut Sandbox.</dd>
+            <dt>Matching Sandbox test receipt</dt><dd>Exactly one Sandbox credit that matches the expected account, currency, full amount, and reference.</dd>
+            <dt>Payment plan</dt><dd>The exact list of customer payouts, broker fee, provider fees, reserve, and refund tied to one matching Sandbox test receipt.</dd>
+            <dt>Plan reference</dt><dd>A short identifier that shows the plan did not change since you reviewed it.</dd>
+            <dt>Reconcile</dt><dd>Refresh the existing case from Revolut Sandbox and confirm its final result. It does not send another payment.</dd>
+            <dt>Signed case record</dt><dd>The downloadable case history retained after reconciliation and closeout. The workspace may call this a “signed evidence bundle.”</dd>
             <dt>Sandbox</dt><dd>A test environment. Its funds and identities are not real.</dd>
           </dl>
         </section>

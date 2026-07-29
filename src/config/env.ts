@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { z } from 'zod';
+import { canonicalCurrencyExponent } from '../cases/currency.js';
 
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -38,6 +39,7 @@ const EnvSchema = z.object({
   CASE_ZIP_MAX_ENTRY_BYTES: z.coerce.number().int().positive().default(10 * 1024 * 1024),
   CASE_ZIP_MAX_TOTAL_BYTES: z.coerce.number().int().positive().default(100 * 1024 * 1024),
   CASE_ZIP_MAX_COMPRESSION_RATIO: z.coerce.number().positive().default(20),
+  CASE_SANDBOX_MAXIMUMS_JSON: z.string().default('{"USD":100000000000}'),
   CLAMAV_HOST: z.string().default('clamav'),
   CLAMAV_PORT: z.coerce.number().int().positive().max(65535).default(3310),
   PAYMENT_MAX_AMOUNT_MINOR: z.coerce.number().int().positive().default(100_000_000),
@@ -54,7 +56,8 @@ const parsed = EnvSchema.parse(process.env);
 export const env = {
   ...parsed,
   allowedCurrencies: new Set(parsed.PAYMENT_ALLOWED_CURRENCIES.split(',').map(value => value.trim().toUpperCase()).filter(Boolean)),
-  trustedSourceKeys: parseTrustedKeys(parsed.CASE_TRUSTED_SOURCE_KEYS_JSON)
+  trustedSourceKeys: parseTrustedKeys(parsed.CASE_TRUSTED_SOURCE_KEYS_JSON),
+  caseSandboxMaximumMinorByCurrency: parseCaseSandboxMaximums(parsed.CASE_SANDBOX_MAXIMUMS_JSON)
 };
 
 function parseTrustedKeys(value: string) {
@@ -64,4 +67,24 @@ function parseTrustedKeys(value: string) {
     throw new Error('CASE_TRUSTED_SOURCE_KEYS_JSON must be a JSON object of key IDs to PEM public keys.');
   }
   return parsedValue as Record<string, string>;
+}
+
+function parseCaseSandboxMaximums(value: string) {
+  let parsedValue: unknown;
+  try {
+    parsedValue = JSON.parse(value) as unknown;
+  } catch {
+    throw new Error('CASE_SANDBOX_MAXIMUMS_JSON must be a JSON object of currency codes to positive safe minor-unit limits.');
+  }
+  if (!parsedValue || typeof parsedValue !== 'object' || Array.isArray(parsedValue)) {
+    throw new Error('CASE_SANDBOX_MAXIMUMS_JSON must be a JSON object of currency codes to positive safe minor-unit limits.');
+  }
+  const entries = Object.entries(parsedValue);
+  if (entries.length === 0 || entries.some(([currency, maximum]) =>
+    !/^[A-Z]{3}$/.test(currency) || canonicalCurrencyExponent(currency) === undefined ||
+    !Number.isSafeInteger(maximum) || Number(maximum) < 1
+  )) {
+    throw new Error('CASE_SANDBOX_MAXIMUMS_JSON must use reviewed uppercase ISO currency codes and positive safe minor-unit limits.');
+  }
+  return Object.freeze(Object.fromEntries(entries) as Record<string, number>);
 }

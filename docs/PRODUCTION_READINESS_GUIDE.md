@@ -5,10 +5,15 @@ designated administrators. Daily operators must not perform these steps.
 
 **Current decision: NO-GO.** The application is Sandbox-only. Do not add
 Production credentials, change provider hosts, expose public ingress, upload
-live customer data, or conduct a live-money test. Promotion requires a new
+or process Production customer data, or conduct a live-money test. Promotion requires a new
 approved project and independent review of the legal entity, country, Revolut
 entity, permissions, safeguarding, segregation, AML responsibilities, fee
 authority, retention, and operating limits.
+
+The separate private Sandbox pilot may use representative client case
+information only when its named data-handling and retention approval allows
+it. That narrow approval is not Production permission and never authorises a
+live-money test.
 
 This guide prepares the Sandbox deployment for a future Revolut Business
 Production integration. It does **not** authorize a Production connection or a
@@ -29,7 +34,7 @@ Changing only the base URL is neither sufficient nor safe.
 | API host | `https://sandbox-b2b.revolut.com/api/1.0` | `https://b2b.revolut.com/api/1.0` |
 | Certificate and client ID | Sandbox-specific | Production-specific |
 | OAuth consent and tokens | Sandbox-specific | Production-specific |
-| Accounts and counterparties | Test data | Real financial data |
+| Accounts and counterparties | Sandbox test data; approved representative case information only under private pilot controls | Real financial data |
 | Current repository support | Active, loopback-only | Intentionally blocked |
 
 Official references:
